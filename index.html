@@ -25,7 +25,7 @@ h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute
 .dot.ok{background:var(--acc)}.dot.syncing{background:var(--gold)}.dot.error{background:var(--red)}
 .card{background:var(--card);border-radius:18px;padding:14px;margin-bottom:12px}
 nav{position:fixed;left:0;right:0;bottom:0;background:rgba(14,16,20,.94);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border-top:1px solid var(--line);display:flex;justify-content:center;padding-bottom:env(safe-area-inset-bottom);z-index:5}
-nav a{flex:1;max-width:130px;text-align:center;padding:9px 0 8px;color:var(--mute);text-decoration:none;font-size:11px;font-weight:600}
+nav a{flex:1;max-width:110px;text-align:center;padding:9px 0 8px;color:var(--mute);text-decoration:none;font-size:11px;font-weight:600}
 nav a svg{display:block;margin:0 auto 3px;width:24px;height:24px}
 nav a.on{color:var(--acc)}
 button{font:inherit;color:inherit;border:0;background:var(--card2);border-radius:12px;padding:10px 14px;font-weight:600;cursor:pointer}
@@ -90,6 +90,17 @@ details summary::-webkit-details-marker{display:none}
 .radio.on .dot-r{border-color:var(--acc)}
 .radio.on .dot-r::after{content:"";position:absolute;inset:3px;border-radius:50%;background:var(--acc)}
 .goal-line{display:flex;align-items:center;gap:6px;color:var(--text);text-decoration:none;padding:2px 0 8px;border-bottom:1px solid var(--line);margin-bottom:6px}
+.lb-row{display:grid;grid-template-columns:34px 1fr auto;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
+.lb-row:first-child{border-top:0}
+.lb-row .pos{font-size:20px;text-align:center;font-weight:800;color:var(--mute)}
+.lb-row .nm{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lb-row .val{font-weight:800;font-variant-numeric:tabular-nums}
+.lb-row .bar{height:5px;border-radius:3px;background:var(--card2);margin-top:5px;overflow:hidden}
+.lb-row .bar i{display:block;height:100%;background:var(--mute);border-radius:3px}
+.lb-row.me .nm{color:var(--acc)}.lb-row.me .bar i{background:var(--acc)}
+.code{font-size:30px;font-weight:800;letter-spacing:.18em;font-variant-numeric:tabular-nums;font-family:ui-monospace,Menlo,monospace}
+.chips.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.chips.scroll .chip{flex:none;padding:8px 14px}
 .empty{text-align:center;color:var(--mute);padding:30px 10px}
 #toast{position:fixed;left:50%;bottom:calc(86px + env(safe-area-inset-bottom));transform:translate(-50%,20px);background:var(--text);color:var(--bg);font-weight:600;padding:10px 16px;border-radius:12px;opacity:0;transition:.25s;pointer-events:none;z-index:9;max-width:90vw;text-align:center;font-size:14px}
 #toast.show{opacity:1;transform:translate(-50%,0)}
@@ -244,7 +255,7 @@ function initSync(){
   sb.auth.onAuthStateChange((ev,session)=>{
     const prev=USER?.id;USER=session?.user||null;
     if(ev==='PASSWORD_RECOVERY'){recovery=true;setTimeout(()=>{location.hash='mehr';render()},0);return}
-    if(USER&&USER.id!==prev){setTimeout(pull,0);if(fromMail)setTimeout(()=>toast('E-Mail bestätigt ✓ Du bist angemeldet.'),300)}
+    if(USER&&USER.id!==prev){SOC.groups=null;SOC.lb={};setTimeout(pull,0);if(fromMail)setTimeout(()=>toast('E-Mail bestätigt ✓ Du bist angemeldet.'),300)}
     if(!USER){syncState='local'}
     setTimeout(()=>{const typing=document.activeElement&&/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);if(!typing)render()},0);
   });
@@ -286,12 +297,13 @@ async function authAction(act){
 /* ---------- UI helpers ---------- */
 let toastT;function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),2600)}
 const ICONS={
+  social:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 19c.6-3.2 3-5 6-5s5.4 1.8 6 5"/><circle cx="17" cy="9" r="2.4"/><path d="M16.5 14.2c2.3.2 4 1.7 4.5 4.3"/></svg>',
   statistik:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19h16"/><path d="M5 15l4.5-5 3.5 3 6-7"/><path d="M15 6h4v4"/></svg>',
   training:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6.5 6.5v11M17.5 6.5v11M3 9.5v5M21 9.5v5M6.5 12h11"/></svg>',
   verlauf:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>',
   plaene:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="5" y="4" width="14" height="17" rx="2.5"/><path d="M9 9h6M9 13h6M9 17h3"/></svg>',
   mehr:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="5.5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="18.5" cy="12" r="1.3"/></svg>'};
-const TABS=[['training','Training'],['statistik','Statistik'],['verlauf','Verlauf'],['plaene','Pläne'],['mehr','Mehr']];
+const TABS=[['training','Training'],['statistik','Statistik'],['social','Social'],['verlauf','Verlauf'],['plaene','Pläne'],['mehr','Mehr']];
 const curTab=()=>{const h=location.hash.slice(1);return h==='info'||TABS.some(t=>t[0]===h)?h:'training'};
 
 
@@ -414,6 +426,80 @@ function viewInfo(){
   return h;
 }
 
+
+/* ---------- Social ---------- */
+const SOC={groups:null,loadingGroups:false,gid:(()=>{try{return localStorage.getItem('gymtracker_group')}catch(e){return null}})(),period:'week',metric:'trainings',lb:{},lbAt:{},loadingLB:false,err:'',panel:false,msg:''};
+const METRICS=[['trainings','Trainings'],['minutes','Zeit'],['volume_kg','Gewicht'],['streak','Serie']];
+const PERIODS=[['week','Woche'],['month','Monat'],['all','Gesamt']];
+function socErr(e){const m=(e&&e.message||'').toLowerCase();if(m.includes('invalid code'))return'Diesen Code gibt es nicht – vertippt?';if(m.includes('group full'))return'Die Gruppe ist voll (max. 50).';if(m.includes('too many groups'))return'Du hast schon 10 Gruppen gegründet.';if(m.includes('invalid name'))return'Bitte einen Gruppennamen (max. 40 Zeichen).';if(m.includes('fetch')||m.includes('network'))return'Keine Verbindung zum Internet.';return'Hat nicht geklappt: '+(e&&e.message||'Fehler')}
+function periodRange(p){const t=new Date();if(p==='week'){const a=weekStart(t),b=new Date(a);b.setDate(a.getDate()+6);return[ymd(a),ymd(b)]}if(p==='month'){const a=new Date(t.getFullYear(),t.getMonth(),1),b=new Date(t.getFullYear(),t.getMonth()+1,0);return[ymd(a),ymd(b)]}return[null,null]}
+function socRender(){if(curTab()==='social'){const typing=document.activeElement&&/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);if(!typing)render()}}
+async function loadGroups(){if(!USER||SOC.loadingGroups)return;SOC.loadingGroups=true;
+  const{data,error}=await sb.from('groups').select('id,name,invite_code,created_at,group_members(count)').order('created_at');
+  SOC.loadingGroups=false;if(error){SOC.err=socErr(error);SOC.groups=SOC.groups||[];socRender();return}
+  SOC.err='';SOC.groups=data.map(g=>({id:g.id,name:g.name,code:g.invite_code,count:g.group_members?.[0]?.count||1}));
+  if(!SOC.groups.some(g=>g.id===SOC.gid))setGid(SOC.groups[0]?.id||null);socRender();loadLB()}
+function setGid(id){SOC.gid=id;try{id?localStorage.setItem('gymtracker_group',id):localStorage.removeItem('gymtracker_group')}catch(e){}}
+async function loadLB(force){if(!USER||!SOC.gid||SOC.loadingLB)return;const key=SOC.gid+'|'+SOC.period;
+  if(!force&&SOC.lb[key]&&Date.now()-SOC.lbAt[key]<30000)return;SOC.loadingLB=true;socRender();
+  if(dirty.size)await flush();
+  const[f,t]=periodRange(SOC.period);
+  const{data,error}=await sb.rpc('group_leaderboard',{p_group:SOC.gid,p_from:f,p_to:t,p_today:today()});
+  SOC.loadingLB=false;if(error){SOC.err=socErr(error);socRender();return}
+  SOC.err='';SOC.lb[key]=data;SOC.lbAt[key]=Date.now();socRender()}
+const fmtMetric=(m,v)=>m==='trainings'?String(v):m==='minutes'?(v?fmtDur(v):'0 Min.'):m==='volume_kg'?fmtInt(v)+' kg':v+(v===1?' Woche':' Wochen');
+function viewSocial(){
+  if(!sb)return`<div class="empty">Social braucht eine Internetverbindung.<br>Öffne die App mit Netz erneut.</div>`;
+  if(!USER)return`<div class="card"><div class="ex-title">Mit Freunden vergleichen</div><div class="muted sm" style="margin:6px 0 12px">Für Gruppen und Rankings brauchst du ein Konto. Deine einzelnen Trainings bleiben privat – geteilt werden nur Summen wie Anzahl Trainings und Trainingszeit.</div><a href="#mehr" class="plan-btn" style="text-decoration:none;color:inherit;background:var(--card2);margin:0"><div><div style="font-weight:700">Anmelden oder registrieren</div></div><span class="go">›</span></a></div>`;
+  let h='';
+  if(PROFILE?.uid!==USER.id)h+=`<div class="card"><div style="font-weight:700;margin-bottom:6px">👋 Wie sollen dich deine Freunde sehen?</div><div class="row"><input id="dispName" maxlength="30" placeholder="Dein Name" autocomplete="nickname"><button class="sm primary" data-act="savename">Speichern</button></div></div>`;
+  if(SOC.groups===null){setTimeout(loadGroups,0);return h+`<div class="empty">Lädt …</div>`}
+  const joinPanel=()=>`<div class="card"><div class="ex-title" style="margin-bottom:4px">Gruppe beitreten</div><div class="muted sm" style="margin-bottom:8px">Code von einem Freund bekommen? Hier eingeben:</div><div class="row"><input id="grpCode" maxlength="6" placeholder="z. B. K7XQ2M" autocapitalize="characters" autocomplete="off" style="text-transform:uppercase;letter-spacing:.12em;font-weight:700"><button class="sm primary" data-act="soc-join">Beitreten</button></div></div>
+  <div class="card"><div class="ex-title" style="margin-bottom:4px">Neue Gruppe gründen</div><div class="muted sm" style="margin-bottom:8px">Du bekommst einen Code, den du deinen Freunden schickst.</div><div class="row"><input id="grpName" maxlength="40" placeholder="z. B. Gym-Jungs"><button class="sm" data-act="soc-create">Gründen</button></div></div>`;
+  const msg=SOC.err?`<div class="card sm warn">${esc(SOC.err)}</div>`:'';
+  if(!SOC.groups.length)return h+msg+`<div class="muted sm" style="padding:0 4px 12px">Noch in keiner Gruppe. Gründe eine oder tritt mit einem Code bei – dann siehst du hier, wer am meisten trainiert.</div>`+joinPanel();
+  const g=SOC.groups.find(x=>x.id===SOC.gid)||SOC.groups[0];
+  h+=`<div class="chips scroll">${SOC.groups.map(x=>`<button class="chip ${x.id===g.id?'on':''}" data-act="soc-group" data-id="${x.id}">${esc(x.name)}</button>`).join('')}<button class="chip ${SOC.panel?'on':''}" data-act="soc-add">+ Gruppe</button></div>`;
+  if(SOC.panel)h+=joinPanel();
+  h+=msg;
+  h+=`<div class="chips">${METRICS.map(([k,l])=>`<button class="chip ${SOC.metric===k?'on':''}" data-act="soc-metric" data-v="${k}">${l}</button>`).join('')}</div>`;
+  if(SOC.metric!=='streak')h+=`<div class="seg" style="margin-bottom:12px">${PERIODS.map(([k,l])=>`<button class="${SOC.period===k?'on':''}" data-act="soc-period" data-v="${k}">${l}</button>`).join('')}</div>`;
+  const rows=SOC.lb[g.id+'|'+SOC.period];
+  if(!rows){setTimeout(()=>loadLB(),0);h+=`<div class="card empty">Lädt …</div>`}
+  else{
+    const m=SOC.metric,val=r=>Number(r[m])||0;
+    const sorted=rows.slice().sort((a,b)=>val(b)-val(a)||a.display_name.localeCompare(b.display_name,'de'));
+    const max=Math.max(1,...sorted.map(val));let rank=0,prev=null;
+    const ranked=sorted.map((r,i)=>{if(val(r)!==prev){rank=i+1;prev=val(r)}return{...r,rank}});
+    h+=`<div class="card">${SOC.loadingLB?'<div class="muted sm" style="text-align:right">aktualisiert …</div>':''}${ranked.map(r=>`<div class="lb-row ${r.is_me?'me':''}"><div class="pos">${val(r)>0&&r.rank<=3?['🥇','🥈','🥉'][r.rank-1]:r.rank}</div><div style="min-width:0"><div class="nm">${esc(r.display_name)}${r.is_me?' (du)':''}</div><div class="bar"><i style="width:${Math.round(val(r)/max*100)}%"></i></div></div><div class="val">${fmtMetric(m,val(r))}</div></div>`).join('')}</div>`;
+    const me=ranked.find(r=>r.is_me);
+    if(me&&ranked.length>1){
+      let t='';if(me.rank===1&&val(me)>0)t=ranked.filter(r=>r.rank===1).length>1?'Du teilst dir Platz 1 – ein Training mehr und er gehört dir allein.':'Du bist vorne – weiter so! 💪';
+      else{const ahead=ranked.filter(r=>val(r)>val(me)).pop();if(ahead){const d=val(ahead)-val(me);t=m==='trainings'?`Noch ${d} Training${d===1?'':'s'} bis Platz ${ahead.rank}.`:m==='minutes'?`Noch ${fmtDur(d)} bis Platz ${ahead.rank}.`:m==='volume_kg'?`Noch ${fmtInt(d)} kg bis Platz ${ahead.rank}.`:`Noch ${d} Woche${d===1?'':'n'} Serie bis Platz ${ahead.rank}.`}}
+      if(t)h+=`<div class="muted sm" style="padding:0 4px 10px">${t}</div>`}
+    if(m==='streak')h+=`<div class="muted sm" style="padding:0 4px 10px">Serie = Wochen am Stück, in denen jemand sein eigenes Wochenziel geschafft hat. Die laufende Woche zählt, sobald das Ziel erreicht ist.</div>`;
+    if(m==='volume_kg')h+=`<div class="muted sm" style="padding:0 4px 10px">Gewicht = Summe aus Gewicht × Wiederholungen aller Sätze (ohne Cardio).</div>`;
+  }
+  h+=`<h2>${esc(g.name)}</h2><div class="card"><div class="between"><div><div class="muted sm">Einladungscode</div><div class="code">${esc(g.code)}</div></div><button class="sm primary" data-act="soc-share" data-id="${g.id}">Teilen</button></div>
+  <div class="muted sm" style="margin-top:8px">${g.count} Mitglied${g.count===1?'':'er'} · Neue Leute geben den Code unter Social → „+ Gruppe“ ein.</div>
+  <div class="actions" style="margin-top:8px"><button class="ghost sm" data-act="soc-refresh">Aktualisieren</button><span class="grow"></span><button class="ghost sm danger" data-act="soc-leave" data-id="${g.id}" data-confirm="1">Gruppe verlassen</button></div></div>`;
+  h+=`<div class="muted sm" style="padding:0 4px 12px">Geteilt werden nur Summen (Anzahl Trainings, Zeit, Gewicht, Serie) und dein Name. Einzelne Trainings und dein Körpergewicht sieht niemand.</div>`;
+  return h;
+}
+async function socAction(act,b){
+  try{
+    if(act==='soc-create'){const n=(document.getElementById('grpName')?.value||'').trim();if(!n){toast('Bitte einen Gruppennamen eingeben');return}
+      const{data,error}=await sb.rpc('create_group',{p_name:n});if(error)throw error;setGid(data.id);SOC.panel=false;SOC.groups=null;SOC.err='';await loadGroups();toast(`Gruppe „${n}“ gegründet – jetzt Code teilen!`)}
+    if(act==='soc-join'){const c=(document.getElementById('grpCode')?.value||'').trim().toUpperCase();if(c.length<6){toast('Der Code hat 6 Zeichen');return}
+      const{data,error}=await sb.rpc('join_group',{p_code:c});if(error)throw error;setGid(data.id);SOC.panel=false;SOC.groups=null;SOC.err='';await loadGroups();toast(`Willkommen in „${data.name}“ 🎉`)}
+    if(act==='soc-leave'){const{error}=await sb.rpc('leave_group',{p_group:b.dataset.id});if(error)throw error;setGid(null);SOC.groups=null;SOC.lb={};render();toast('Gruppe verlassen')}
+  }catch(e){SOC.err=socErr(e);render()}
+}
+async function shareCode(id){const g=SOC.groups.find(x=>x.id===id);if(!g)return;
+  const url=location.origin+location.pathname,text=`Komm in meine Gym-Gruppe „${g.name}“! 💪\n1. App öffnen: ${url}\n2. Konto anlegen\n3. Social → „+ Gruppe“ → Code: ${g.code}`;
+  try{if(navigator.share){await navigator.share({text});return}}catch(e){if(e&&e.name==='AbortError')return}
+  try{await navigator.clipboard.writeText(text);toast('Einladung kopiert – jetzt in WhatsApp einfügen')}catch(e){toast('Code: '+g.code)}}
+
 /* ---------- Views ---------- */
 function viewTraining(){
   if(S.active)return viewActive();
@@ -502,11 +588,11 @@ function viewMehr(){
 }
 function render(){
   const tab=curTab();
-  const body={training:viewTraining,statistik:viewStatistik,verlauf:viewVerlauf,plaene:viewPlaene,mehr:viewMehr,info:viewInfo}[tab]();
-  const title={training:S.active?'Training läuft':'Training',statistik:'Statistik',verlauf:'Verlauf',plaene:'Pläne',mehr:'Mehr',info:'Warum tracken?'}[tab];
+  const body={training:viewTraining,statistik:viewStatistik,verlauf:viewVerlauf,plaene:viewPlaene,mehr:viewMehr,info:viewInfo,social:viewSocial}[tab]();
+  const title={training:S.active?'Training läuft':'Training',statistik:'Statistik',social:'Social',verlauf:'Verlauf',plaene:'Pläne',mehr:'Mehr',info:'Warum tracken?'}[tab];
   document.getElementById('app').innerHTML=`<header><h1>${title}</h1>${syncHTML()}</header>${body}<nav>${TABS.map(([k,l])=>`<a href="#${k}" class="${k===tab||(tab==='info'&&k==='mehr')?'on':''}">${ICONS[k]}${l}${k==='training'&&S.active&&tab!=='training'?' •':''}</a>`).join('')}</nav>`;
 }
-window.addEventListener('hashchange',()=>{exportText=null;render();window.scrollTo(0,0)});
+window.addEventListener('hashchange',()=>{if(curTab()==='social'&&USER&&SOC.groups)setTimeout(()=>loadLB(),0);exportText=null;render();window.scrollTo(0,0)});
 
 /* ---------- Actions ---------- */
 function startWorkout(planId){
@@ -519,7 +605,7 @@ function finishWorkout(){
   const entries=a.entries.map(en=>{const c=isCardio(en.exId);return{exId:en.exId,name:exName(en.exId),cardio:c||undefined,sets:c?en.sets.map(s=>({l:num(s.w),t:num(s.r)})).filter(s=>s.t!=null&&s.t>0):en.sets.map(s=>({w:num(s.w),r:num(s.r)})).filter(s=>s.r!=null&&s.r>0)}}).filter(e=>e.sets.length);
   if(!entries.length){toast('Noch keine Sätze eingetragen');return}
   const bwv=num(a.bw);const w={id:a.id,planId:a.planId,planName:plan?plan.name:'Freies Training',date:a.date||today(),startedAt:a.startedAt,finishedAt:Date.now(),durationMin:a.date===today()?Math.max(1,Math.round((Date.now()-a.startedAt)/60000)):null,entries,bodyweight:bwv!=null&&bwv>20&&bwv<400?bwv:null};
-  S.workouts.push(w);S.active=null;touchWorkout(w);touchCore();render();window.scrollTo(0,0);
+  S.workouts.push(w);S.active=null;SOC.lb={};touchWorkout(w);touchCore();render();window.scrollTo(0,0);
   toast(`Gespeichert 💪 ${w.durationMin?fmtDur(w.durationMin)+' · ':''}${setCount(w)} ${setCount(w)===1?'Satz':'Sätze'}`);
 }
 function exportJSON(){return JSON.stringify({app:'gym-tracker',version:1,exportedAt:new Date().toISOString(),data:{exercises:S.exercises,plans:S.plans,workouts:S.workouts.filter(w=>!w.deleted),settings:S.settings}},null,1)}
@@ -577,8 +663,15 @@ document.addEventListener('click',async ev=>{
     case'import':doImport();break;
     case'login':case'signup':case'forgot':authAction(act);break;
     case'savename':saveName();break;
+    case'soc-create':case'soc-join':case'soc-leave':socAction(act,b);break;
+    case'soc-group':SOC.gid=b.dataset.id;setGid(b.dataset.id);SOC.err='';render();loadLB();break;
+    case'soc-period':SOC.period=b.dataset.v;render();loadLB();break;
+    case'soc-metric':SOC.metric=b.dataset.v;render();break;
+    case'soc-add':SOC.panel=!SOC.panel;render();break;
+    case'soc-share':shareCode(b.dataset.id);break;
+    case'soc-refresh':SOC.groups=null;SOC.lb={};render();break;
     case'syncnow':await pull();if(dirty.size)await flush();toast(syncState==='ok'?'Alles synchronisiert ✓':'Gerade keine Verbindung');break;
-    case'logout':{try{await sb.auth.signOut()}catch(e){}USER=null;PROFILE=null;saveProfileCache();dirty.clear();persistDirty();S=defaults();S.settings.cardioAdded=false;applyCardio();save();authMsg='';render();toast('Abgemeldet');break}
+    case'logout':{try{await sb.auth.signOut()}catch(e){}USER=null;PROFILE=null;saveProfileCache();SOC.groups=null;SOC.lb={};setGid(null);dirty.clear();persistDirty();S=defaults();S.settings.cardioAdded=false;applyCardio();save();authMsg='';render();toast('Abgemeldet');break}
     case'setpw':{const pw=document.getElementById('newPw').value;if(pw.length<6){authMsg='Mindestens 6 Zeichen.';render();break}
       const{error}=await sb.auth.updateUser({password:pw});if(error){authMsg=authErr(error);render();break}recovery=false;authMsg='';render();toast('Neues Passwort gespeichert ✓');break}
   }

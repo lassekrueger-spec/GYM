@@ -98,7 +98,7 @@ details summary::-webkit-details-marker{display:none}
 .lb-row .bar{height:5px;border-radius:3px;background:var(--card2);margin-top:5px;overflow:hidden}
 .lb-row .bar i{display:block;height:100%;background:var(--mute);border-radius:3px}
 .lb-row.me .nm{color:var(--acc)}.lb-row.me .bar i{background:var(--acc)}
-.code{font-size:30px;font-weight:800;letter-spacing:.18em;font-variant-numeric:tabular-nums;font-family:ui-monospace,Menlo,monospace}
+.grp{padding:12px 14px}
 .chips.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
 .chips.scroll .chip{flex:none;padding:8px 14px}
 .empty{text-align:center;color:var(--mute);padding:30px 10px}
@@ -480,9 +480,9 @@ function viewSocial(){
     if(m==='streak')h+=`<div class="muted sm" style="padding:0 4px 10px">Serie = Wochen am Stück, in denen jemand sein eigenes Wochenziel geschafft hat. Die laufende Woche zählt, sobald das Ziel erreicht ist.</div>`;
     if(m==='volume_kg')h+=`<div class="muted sm" style="padding:0 4px 10px">Gewicht = Summe aus Gewicht × Wiederholungen aller Sätze (ohne Cardio).</div>`;
   }
-  h+=`<h2>${esc(g.name)}</h2><div class="card"><div class="between"><div><div class="muted sm">Einladungscode</div><div class="code">${esc(g.code)}</div></div><button class="sm primary" data-act="soc-share" data-id="${g.id}">Teilen</button></div>
-  <div class="muted sm" style="margin-top:8px">${g.count} Mitglied${g.count===1?'':'er'} · Neue Leute geben den Code unter Social → „+ Gruppe“ ein.</div>
-  <div class="actions" style="margin-top:8px"><button class="ghost sm" data-act="soc-refresh">Aktualisieren</button><span class="grow"></span><button class="ghost sm danger" data-act="soc-leave" data-id="${g.id}" data-confirm="1">Gruppe verlassen</button></div></div>`;
+  h+=`<details class="card grp"><summary><div class="between"><div class="sm"><b>👥 ${esc(g.name)}</b> <span class="muted">· ${g.count} Mitglied${g.count===1?'':'er'}</span></div><span class="muted sm">verwalten ▾</span></div></summary>
+  <div class="row sm" style="margin-top:10px;flex-wrap:wrap"><span class="muted">Code:</span><b style="letter-spacing:.12em;font-family:ui-monospace,Menlo,monospace">${esc(g.code)}</b><span class="grow"></span><button class="sm primary" data-act="soc-share" data-id="${g.id}">Freunde einladen</button></div>
+  <div class="actions" style="margin-top:6px"><button class="ghost sm" data-act="soc-refresh" style="padding-left:0">Aktualisieren</button><span class="grow"></span><button class="ghost sm danger" data-act="soc-leave" data-id="${g.id}" data-confirm="1">Gruppe verlassen</button></div></details>`;
   h+=`<div class="muted sm" style="padding:0 4px 12px">Geteilt werden nur Summen (Anzahl Trainings, Zeit, Gewicht, Serie) und dein Name. Einzelne Trainings und dein Körpergewicht sieht niemand.</div>`;
   return h;
 }

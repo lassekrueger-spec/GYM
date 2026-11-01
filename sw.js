@@ -1,6 +1,6 @@
 // Offline-Cache: App lädt auch ohne Netz im Gym
-const CACHE = 'gym-v6';
-const FILES = ['./', 'index.html', 'manifest.json', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
+const CACHE = 'gym-v7';
+const FILES = ['./', 'index.html', 'supabase.js', 'manifest.json', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));
 });
@@ -10,8 +10,10 @@ self.addEventListener('activate', e => {
 // Erst Netz (immer neueste Version, am Browser-Cache vorbei), bei keinem Netz aus dem Cache
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
+  // Nur eigene Dateien cachen – Anfragen an die Datenbank laufen immer direkt
+  if (new URL(e.request.url).origin !== location.origin) return;
   e.respondWith(
-    (new URL(e.request.url).origin === location.origin ? fetch(e.request.url, { cache: 'no-cache' }) : fetch(e.request)).then(r => {
+    fetch(e.request.url, { cache: 'no-cache' }).then(r => {
       const copy = r.clone();
       caches.open(CACHE).then(c => c.put(e.request, copy));
       return r;

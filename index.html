@@ -82,6 +82,14 @@ details summary::-webkit-details-marker{display:none}
 .info-card p{margin:0;color:#c9ced8;line-height:1.5}
 .info-card p+p{margin-top:8px}
 .back{display:inline-block;color:var(--mute);text-decoration:none;font-weight:600;margin:-4px 0 12px}
+.radio-list{display:flex;flex-direction:column;gap:8px}
+.radio{display:flex;align-items:center;gap:12px;text-align:left;padding:12px;border:2px solid transparent;background:var(--card2);font-weight:500}
+.radio b{display:block;font-size:16px;margin-bottom:1px}
+.radio .dot-r{width:22px;height:22px;border-radius:50%;border:2px solid var(--mute);flex:none;position:relative}
+.radio.on{border-color:var(--acc)}
+.radio.on .dot-r{border-color:var(--acc)}
+.radio.on .dot-r::after{content:"";position:absolute;inset:3px;border-radius:50%;background:var(--acc)}
+.goal-line{display:flex;align-items:center;gap:6px;color:var(--text);text-decoration:none;padding:2px 0 8px;border-bottom:1px solid var(--line);margin-bottom:6px}
 .empty{text-align:center;color:var(--mute);padding:30px 10px}
 #toast{position:fixed;left:50%;bottom:calc(86px + env(safe-area-inset-bottom));transform:translate(-50%,20px);background:var(--text);color:var(--bg);font-weight:600;padding:10px 16px;border-radius:12px;opacity:0;transition:.25s;pointer-events:none;z-index:9;max-width:90vw;text-align:center;font-size:14px}
 #toast.show{opacity:1;transform:translate(-50%,0)}
@@ -208,7 +216,13 @@ function bwCls(p){if(p==null)return'flat';const g=S.settings.bwGoal||'gain';
   if(g==='hold')return Math.abs(p)<=1?'up':'warn';
   if(Math.abs(p)<0.05)return'flat';return(g==='gain'?p>0:p<0)?'up':'down'}
 const CLR={up:'#c8f560',down:'#ff6b6b',warn:'#ffd166',flat:'#8b94a5'};
-function goalSeg(){const g=S.settings.bwGoal||'gain';return`<div class="seg">${[['gain','Zunehmen'],['hold','Halten'],['lose','Abnehmen']].map(([k,l])=>`<button class="${g===k?'on':''}" data-act="bwgoal" data-v="${k}">${l}</button>`).join('')}</div>`}
+const GOALS=[['gain','📈','Zunehmen','Steigt dein Gewicht, wird das grün angezeigt.'],['hold','⚖️','Halten','Grün, solange du maximal ±1 % schwankst.'],['lose','📉','Abnehmen','Sinkt dein Gewicht, wird das grün angezeigt.']];
+function goalRadio(){const g=S.settings.bwGoal||'gain';return`<div class="radio-list">${GOALS.map(([k,i,l,d])=>`<button class="radio ${g===k?'on':''}" data-act="bwgoal" data-v="${k}"><span class="dot-r"></span><span class="grow"><b>${i} ${l}</b><span class="muted sm">${d}</span></span></button>`).join('')}</div>`}
+function goalLine(){const g=GOALS.find(x=>x[0]===(S.settings.bwGoal||'gain'));return`<a href="#mehr" class="goal-line"><span class="muted">Dein Ziel:</span> <b>${g[1]} ${g[2]}</b><span class="grow"></span><span class="muted sm">ändern ›</span></a>`}
+function goalConflict(){const t=S.settings.bwTarget,st=bwSeries()[0]?.v,g=S.settings.bwGoal||'gain';if(t==null||st==null)return false;return(g==='gain'&&t<st)||(g==='lose'&&t>st)}
+function goalWarn(){const t=S.settings.bwTarget,c=lastBW(),g=S.settings.bwGoal||'gain';if(t==null||c==null||!goalConflict())return'';
+  if(g==='gain'&&t<c)return`<div class="sm warn" style="margin-top:8px">Dein Zielgewicht liegt unter deinem aktuellen Gewicht (${fmtW(c)} kg). Passt „Zunehmen“?</div>`;
+  if(g==='lose'&&t>c)return`<div class="sm warn" style="margin-top:8px">Dein Zielgewicht liegt über deinem aktuellen Gewicht (${fmtW(c)} kg). Passt „Abnehmen“?</div>`;return''}
 const fmtVal=(v,weighted=true,cardio=false)=>cardio?'Stufe '+fmtW(Math.round(v*10)/10):weighted?fmtW(Math.round(v*10)/10)+' kg':Math.round(v)+' Wdh.';
 const shortD=s=>parseD(s).toLocaleDateString('de-DE',{day:'numeric',month:'short'});
 function chartSVG(series){
@@ -246,12 +260,13 @@ function viewStatistik(){
   h+=`<div class="card stat3"><div><b class="${strengthCls(avg)}">${avg==null?'–':(avg>0?'+':'')+avg.toFixed(1).replace('.',',')+'%'}</b><span class="muted sm">Ø Kraft</span></div><div><b>${wr.length}</b><span class="muted sm">Trainings</span></div><div><b>${(wr.length/weeks).toFixed(1).replace('.',',')}</b><span class="muted sm">pro Woche</span></div><div><b>${(()=>{const d=wr.filter(w=>w.durationMin);return d.length?Math.round(d.reduce((a,w)=>a+w.durationMin,0)/d.length)+"'":"–"})()}</b><span class="muted sm">Ø Dauer</span></div></div>`;
   // Körpergewicht
   const bwAll=bwSeries(),bw=inRange(bwAll),bp=pct(bw),bc=bwCls(bp),cur=lastBW(),tgt=S.settings.bwTarget;
-  h+=`<h2>Körpergewicht</h2><div class="card">${goalSeg()}`;
+  h+=`<h2>Körpergewicht</h2><div class="card">${goalLine()}`;
   if(cur==null)h+=`<div class="muted sm" style="margin-top:12px">Trag beim nächsten Training dein Körpergewicht ein – dann siehst du hier den Verlauf.</div>`;
   else{
     h+=`<div class="kpi"><span class="v">${fmtW(cur)} kg</span><span class="trend ${bc}">${fmtPct(bp)}</span></div>`;
     if(bw.length>=2)h+=`<div class="muted sm">${fmtW(bw[0].v)} → ${fmtW(bw[bw.length-1].v)} kg im Zeitraum</div>`;
-    if(tgt!=null){const diff=tgt-cur,g=S.settings.bwGoal||'gain';const done=g==='gain'?diff<=0:g==='lose'?diff>=0:Math.abs(diff)<0.5;
+    if(tgt!=null&&goalConflict())h+=`<div class="sm warn" style="margin-top:4px">Zielgewicht ${fmtW(tgt)} kg passt nicht zu deinem Ziel – unter „ändern“ anpassen.</div>`;
+    else if(tgt!=null){const diff=tgt-cur,g=S.settings.bwGoal||'gain';const done=g==='gain'?diff<=0:g==='lose'?diff>=0:Math.abs(diff)<0.5;
       h+=`<div class="sm" style="margin-top:4px">Ziel ${fmtW(tgt)} kg · ${done?'<span class="up">erreicht 🎉</span>':`noch ${diff>0?'+':'−'}${fmtW(Math.abs(Math.round(diff*10)/10))} kg`}</div>`}
     h+=bw.length?chartSVG([{points:bw,color:CLR[bc]}]):`<div class="muted sm" style="margin-top:8px">Keine Werte in diesem Zeitraum.</div>`;
   }
@@ -367,7 +382,7 @@ function viewMehr(){
   const goal=S.settings.weeklyGoal||3;
   let h=`<a href="#info" class="plan-btn" style="text-decoration:none;color:inherit"><div><div class="name" style="font-size:18px">💡 Warum tracken?</div><div class="meta">Was dir das Aufschreiben wirklich bringt</div></div><span class="go">›</span></a>`;
   h+=`<h2>Wochenziel</h2><div class="card between"><div>Trainings pro Woche</div><div class="stepper"><button class="icon-btn" data-act="goal" data-d="-1">−</button><b>${goal}</b><button class="icon-btn" data-act="goal" data-d="1">+</button></div></div>`;
-  h+=`<h2>Körpergewicht-Ziel</h2><div class="card">${goalSeg()}<div class="row" style="margin-top:10px"><span class="grow sm muted">Zielgewicht (optional)</span><input inputmode="decimal" data-act="bwtarget" value="${S.settings.bwTarget!=null?fmtW(S.settings.bwTarget):''}" placeholder="kg" style="width:90px;text-align:center"></div></div>`;
+  h+=`<h2>Körpergewicht-Ziel</h2><div class="card"><div class="muted sm" style="margin-bottom:8px">Wähle eins – danach richtet sich, ob deine Gewichtsveränderung grün oder rot angezeigt wird.</div>${goalRadio()}<div class="row" style="margin-top:12px"><span class="grow sm muted">Zielgewicht (optional)</span><input inputmode="decimal" data-act="bwtarget" value="${S.settings.bwTarget!=null?fmtW(S.settings.bwTarget):''}" placeholder="kg" style="width:90px;text-align:center"></div>${goalWarn()}</div>`;
   h+=`<h2>Speicherung</h2><div class="card sm">Deine Daten liegen nur auf diesem iPhone. Mach regelmäßig ein Backup (z. B. in iCloud Drive) – falls du das Handy wechselst oder die App löschst.${lastBackupHTML()}</div>`;
   h+=`<h2>Backup</h2><div class="card"><div class="row" style="flex-wrap:wrap"><button class="sm primary" data-act="export">Backup-Datei sichern</button><button class="sm" data-act="copyexport">Backup kopieren</button></div>
   ${exportText?`<textarea readonly style="margin-top:10px" onfocus="this.select()">${esc(exportText)}</textarea><div class="muted sm">Text markieren und kopieren, z. B. in eine Notiz.</div>`:''}

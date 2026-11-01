@@ -192,7 +192,7 @@ async function flush(){
   if(!USER||flushing||!dirty.size)return;flushing=true;setSync('syncing');
   const keys=[...dirty];dirty.clear();persistDirty();let ok=true;
   try{
-    if(keys.includes('core')){if(!S.coreUpdatedAt)S.coreUpdatedAt=Date.now();const{error}=await sb.from('user_state').upsert({user_id:USER.id,data:coreData(),client_updated_at:S.coreUpdatedAt});if(error)throw error}
+    if(keys.includes('core')){const{error}=await sb.from('user_state').upsert({user_id:USER.id,data:coreData(),client_updated_at:S.coreUpdatedAt||1});if(error)throw error}
     const ws=keys.filter(k=>k.startsWith('w_')).map(k=>S.workouts.find(w=>'w_'+w.id===k)).filter(Boolean);
     for(let i=0;i<ws.length;i+=200){const{error}=await sb.from('workouts').upsert(ws.slice(i,i+200).map(wRow));if(error)throw error}
   }catch(e){ok=false;keys.forEach(k=>dirty.add(k));persistDirty()}
@@ -208,7 +208,7 @@ async function pull(){
     const[{data:st,error:e1},rws]=await Promise.all([sb.from('user_state').select('data,client_updated_at').maybeSingle(),fetchAllWorkouts()]);
     if(e1)throw e1;let changed=false;
     if(st&&st.data&&st.client_updated_at>(S.coreUpdatedAt||0)){const d=st.data;S.exercises=d.exercises||[];S.plans=d.plans||[];S.active=d.active||null;S.settings=d.settings||{weeklyGoal:3};S.coreUpdatedAt=st.client_updated_at;dirty.delete('core');changed=true}
-    else if(!st||st.client_updated_at<(S.coreUpdatedAt||0)||!S.coreUpdatedAt)dirty.add('core');
+    else if(!st||st.client_updated_at<(S.coreUpdatedAt||0))dirty.add('core');
     const seen=new Set();
     for(const r of rws){const v=r.data;if(!v||!v.id)continue;seen.add(v.id);v.updatedAt=r.client_updated_at;
       const i=S.workouts.findIndex(w=>w.id===v.id);

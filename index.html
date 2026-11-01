@@ -201,9 +201,16 @@ async function flush(){
   else if(dirty.size)scheduleFlush(300);else setSync('ok');
 }
 async function fetchAllWorkouts(){const out=[];for(let from=0;;from+=1000){const{data,error}=await sb.from('workouts').select('data,client_updated_at').order('id').range(from,from+999);if(error)throw error;out.push(...data);if(data.length<1000)return out}}
+let PROFILE=(()=>{try{return JSON.parse(localStorage.getItem('gymtracker_profile'))}catch(e){return null}})();
+function saveProfileCache(){try{PROFILE?localStorage.setItem('gymtracker_profile',JSON.stringify(PROFILE)):localStorage.removeItem('gymtracker_profile')}catch(e){}}
+async function loadProfile(){const{data,error}=await sb.from('profiles').select('display_name').maybeSingle();if(error)return;const n=data?.display_name||null;if((PROFILE?.name||null)!==n){PROFILE=n?{uid:USER.id,name:n}:null;saveProfileCache();const typing=document.activeElement&&/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);if(!typing)render()}}
+async function saveName(){const el=document.getElementById('dispName');const n=(el?.value||'').trim().replace(/\s+/g,' ');
+  if(!n){toast('Bitte einen Namen eingeben');return}if(n.length>30){toast('Maximal 30 Zeichen');return}
+  const{error}=await sb.from('profiles').upsert({user_id:USER.id,display_name:n});if(error){toast(authErr(error));return}
+  PROFILE={uid:USER.id,name:n};saveProfileCache();render();toast('Name gespeichert ✓')}
 let pulling=false;
 async function pull(){
-  if(!USER||pulling)return;pulling=true;setSync('syncing');
+  if(!USER||pulling)return;pulling=true;setSync('syncing');loadProfile();
   try{
     const[{data:st,error:e1},rws]=await Promise.all([sb.from('user_state').select('data,client_updated_at').maybeSingle(),fetchAllWorkouts()]);
     if(e1)throw e1;let changed=false;
@@ -250,7 +257,9 @@ function viewAccount(){
   if(recovery)return h+`<div class="sm" style="margin-bottom:8px">Neues Passwort festlegen:</div><input type="password" id="newPw" placeholder="Neues Passwort (min. 6 Zeichen)" autocomplete="new-password"><button class="primary sm" data-act="setpw" style="margin-top:8px">Passwort speichern</button>${authMsg?`<div class="sm warn" style="margin-top:8px">${esc(authMsg)}</div>`:''}</div>`;
   if(USER){
     h+=`<div class="between"><div><div class="muted sm">Angemeldet als</div><div style="font-weight:600;word-break:break-all">${esc(USER.email)}</div></div>${syncHTML()}</div>
-    <div class="muted sm" style="margin-top:8px">Deine Trainings werden automatisch in deinem Konto gesichert. Auf einem neuen Handy einfach anmelden – alles ist wieder da.</div>
+    <div style="margin-top:12px"><div class="muted sm" style="margin-bottom:6px">Dein Name in den Rankings${PROFILE?.name?'':' <span class="warn">– noch nicht festgelegt</span>'}</div>
+    <div class="row"><input id="dispName" maxlength="30" placeholder="z. B. Lasse" value="${esc(PROFILE?.uid===USER.id?PROFILE.name:'')}" autocomplete="nickname"><button class="sm ${PROFILE?.name?'':'primary'}" data-act="savename">Speichern</button></div></div>
+    <div class="muted sm" style="margin-top:10px">Deine Trainings werden automatisch in deinem Konto gesichert. Auf einem neuen Handy einfach anmelden – alles ist wieder da.</div>
     <div class="row" style="margin-top:10px;flex-wrap:wrap"><button class="sm" data-act="syncnow">Jetzt synchronisieren</button><span class="grow"></span><button class="ghost sm danger" data-act="logout" data-confirm="1">Abmelden</button></div>
     ${dirty.size?`<div class="sm warn" style="margin-top:8px">${dirty.size} Änderung${dirty.size===1?'':'en'} noch nicht hochgeladen. Beim Abmelden gehen sie verloren.</div>`:''}`;
   }else{
@@ -408,7 +417,8 @@ function viewInfo(){
 /* ---------- Views ---------- */
 function viewTraining(){
   if(S.active)return viewActive();
-  const accBanner=sb&&!USER?`<a href="#mehr" class="plan-btn" style="text-decoration:none;color:inherit;border:1px dashed var(--line);background:transparent"><div><div style="font-weight:700">☁️ Daten online sichern</div><div class="meta">Kostenloses Konto anlegen – dann ist nichts mehr nur auf dem Handy</div></div><span class="go">›</span></a>`:'';
+  const nameBanner=USER&&PROFILE?.uid!==USER.id?`<a href="#mehr" class="plan-btn" style="text-decoration:none;color:inherit;border:1px dashed var(--line);background:transparent"><div><div style="font-weight:700">👋 Wie sollen dich deine Freunde sehen?</div><div class="meta">Leg unter „Mehr“ deinen Namen für die Rankings fest</div></div><span class="go">›</span></a>`:'';
+  const accBanner=nameBanner||(sb&&!USER?`<a href="#mehr" class="plan-btn" style="text-decoration:none;color:inherit;border:1px dashed var(--line);background:transparent"><div><div style="font-weight:700">☁️ Daten online sichern</div><div class="meta">Kostenloses Konto anlegen – dann ist nichts mehr nur auf dem Handy</div></div><span class="go">›</span></a>`:'');
   const ws=workoutsSorted(),st=weekStart(new Date()),done=ws.filter(w=>parseD(w.date)>=st).length,goal=S.settings.weeklyGoal||3;
   const lastDate=p=>ws.find(w=>w.planId===p.id)?.date||null;
   let sugg=null;for(const p of S.plans){const d=lastDate(p);if(!sugg||(d===null&&sugg.d!==null)||(d!==null&&sugg.d!==null&&d<sugg.d))sugg={p,d}}
@@ -566,8 +576,9 @@ document.addEventListener('click',async ev=>{
       catch(e){if(e&&e.name!=='AbortError')toast('Backup fehlgeschlagen')}break}
     case'import':doImport();break;
     case'login':case'signup':case'forgot':authAction(act);break;
+    case'savename':saveName();break;
     case'syncnow':await pull();if(dirty.size)await flush();toast(syncState==='ok'?'Alles synchronisiert ✓':'Gerade keine Verbindung');break;
-    case'logout':{try{await sb.auth.signOut()}catch(e){}USER=null;dirty.clear();persistDirty();S=defaults();S.settings.cardioAdded=false;applyCardio();save();authMsg='';render();toast('Abgemeldet');break}
+    case'logout':{try{await sb.auth.signOut()}catch(e){}USER=null;PROFILE=null;saveProfileCache();dirty.clear();persistDirty();S=defaults();S.settings.cardioAdded=false;applyCardio();save();authMsg='';render();toast('Abgemeldet');break}
     case'setpw':{const pw=document.getElementById('newPw').value;if(pw.length<6){authMsg='Mindestens 6 Zeichen.';render();break}
       const{error}=await sb.auth.updateUser({password:pw});if(error){authMsg=authErr(error);render();break}recovery=false;authMsg='';render();toast('Neues Passwort gespeichert ✓');break}
   }

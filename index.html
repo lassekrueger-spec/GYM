@@ -82,6 +82,7 @@ details summary::-webkit-details-marker{display:none}
 #toast.show{opacity:1;transform:translate(-50%,0)}
 .stepper{display:flex;align-items:center;gap:14px}
 .stepper b{font-size:24px;min-width:24px;text-align:center}
+.timer{font-size:34px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.01em;color:var(--acc);margin:2px 0 4px}
 .date-in{width:auto;padding:6px 8px;font-size:15px;background:transparent;border-color:var(--line)}
 .bw-in{display:flex;align-items:center;gap:8px;margin-top:10px}
 .bw-in input{width:92px;text-align:center;font-weight:600;padding:7px 8px}
@@ -105,8 +106,8 @@ details summary::-webkit-details-marker{display:none}
 .ex-list .r .grow{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pill{font-size:12px;font-weight:700;padding:3px 8px;border-radius:999px;background:var(--card2);min-width:62px;text-align:center}
 .pill.up{background:#2a3a14}.pill.down{background:#3d1d1f}
-.stat3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center}
-.stat3 b{display:block;font-size:20px;font-weight:800}
+.stat3{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;text-align:center}
+.stat3 b{display:block;font-size:18px;font-weight:800}
 .toggle{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--mute);margin-top:10px}
 .toggle input{-webkit-appearance:checkbox;appearance:auto;width:18px;height:18px;padding:0;margin:0;accent-color:var(--acc)}
 </style>
@@ -116,7 +117,7 @@ details summary::-webkit-details-marker{display:none}
 <div id="toast"></div>
 <script>
 "use strict";
-const GROUPS=['Brust','Rücken','Schultern','Bizeps','Trizeps','Beine','Bauch','Sonstiges'];
+const GROUPS=['Brust','Rücken','Schultern','Bizeps','Trizeps','Beine','Bauch','Cardio','Sonstiges'];
 const LS_KEY='gymtracker_state_v1',LS_DIRTY='gymtracker_dirty_v1';
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -130,7 +131,8 @@ const fmtInt=n=>Math.round(n).toLocaleString('de-DE');
 const fmtDate=s=>parseD(s).toLocaleDateString('de-DE',{weekday:'short',day:'numeric',month:'short'});
 function daysAgo(s){const d=Math.round((parseD(today())-parseD(s))/864e5);return d<=0?'heute':d===1?'gestern':`vor ${d} Tagen`}
 function weekStart(d){const x=new Date(d.getFullYear(),d.getMonth(),d.getDate());x.setDate(x.getDate()-((x.getDay()+6)%7));return x}
-const setStr=s=>s.w!=null?`${fmtW(s.w)}×${s.r}`:`${s.r} Wdh.`;
+const setStr=s=>s.t!=null?`${s.l!=null?'Stufe '+fmtW(s.l)+' · ':''}${fmtW(s.t)} Min.`:s.w!=null?`${fmtW(s.w)}×${s.r}`:`${s.r} Wdh.`;
+const fmtDur=m=>m==null?'':m>=60?`${Math.floor(m/60)} Std. ${m%60} Min.`:`${m} Min.`;
 
 /* ---------- State ---------- */
 function defaults(){
@@ -142,6 +144,7 @@ function defaults(){
 }
 function load(){try{const s=JSON.parse(localStorage.getItem(LS_KEY));if(s&&Array.isArray(s.exercises)&&Array.isArray(s.workouts))return s}catch(e){}return defaults()}
 let S=load();
+if(!S.settings.cardioAdded){if(!S.exercises.some(e=>e.group==='Cardio'))['Laufband','Crosstrainer','Fahrrad-Ergometer','Stepper','Rudergerät'].forEach(n=>S.exercises.push({id:uid(),name:n,group:'Cardio'}));S.settings.cardioAdded=true;try{localStorage.setItem(LS_KEY,JSON.stringify(S))}catch(e){}}
 function save(){try{localStorage.setItem(LS_KEY,JSON.stringify(S))}catch(e){}}
 function touchCore(){S.coreUpdatedAt=Date.now();save();markDirty('core')}
 function touchWorkout(w){w.updatedAt=Date.now();save();markDirty('w_'+w.id)}
@@ -150,9 +153,12 @@ const exById=id=>S.exercises.find(e=>e.id===id);
 const planById=id=>S.plans.find(p=>p.id===id);
 const exName=(id,fb)=>exById(id)?.name||fb||'Gelöschte Übung';
 function workoutsSorted(){return S.workouts.filter(w=>!w.deleted).sort((a,b)=>b.date.localeCompare(a.date)||(b.finishedAt||0)-(a.finishedAt||0))}
+const isCardio=exId=>exById(exId)?.group==='Cardio';
+const defaultSets=exId=>{const l=lastFor(exId);return Array.from({length:l?l.sets.length:(isCardio(exId)?1:3)},()=>({w:'',r:'',done:false}))};
 function lastFor(exId){for(const w of workoutsSorted()){const e=w.entries.find(e=>e.exId===exId);if(e&&e.sets.length)return{date:w.date,sets:e.sets}}return null}
 function bestFor(exId){let m=null;for(const w of S.workouts){if(w.deleted)continue;for(const e of w.entries)if(e.exId===exId)for(const s of e.sets)if(s.w!=null&&(m==null||s.w>m))m=s.w}return m}
 const volume=w=>w.entries.reduce((a,e)=>a+e.sets.reduce((b,s)=>b+(s.w||0)*(s.r||0),0),0);
+const cardioMin=w=>w.entries.reduce((a,e)=>a+e.sets.reduce((b,s)=>b+(s.t||0),0),0);
 const setCount=w=>w.entries.reduce((a,e)=>a+e.sets.length,0);
 
 /* ---------- Speicherung lokal ---------- */
@@ -177,6 +183,8 @@ function lastBW(){for(const w of workoutsSorted())if(w.bodyweight!=null)return w
 const e1rm=s=>s.w==null||!s.r||s.w<=0?null:(s.r===1?s.w:s.w*(1+s.r/30));
 function exSeries(exId){
   const ws=workoutsSorted().slice().reverse();
+  const cardio=ws.some(w=>w.entries.some(e=>e.exId===exId&&e.sets.some(s=>s.t!=null)));
+  if(cardio){const points=[];for(const w of ws){const e=w.entries.find(e=>e.exId===exId);if(!e)continue;let l=null,t=0;for(const s of e.sets){if(s.l!=null&&(l==null||s.l>l))l=s.l;t+=s.t||0}if(l!=null||t)points.push({date:w.date,v:l??0,t})}return{cardio:true,weighted:false,points}}
   const weighted=ws.some(w=>w.entries.some(e=>e.exId===exId&&e.sets.some(s=>s.w!=null&&s.w>0)));
   const points=[];
   for(const w of ws){const e=w.entries.find(e=>e.exId===exId);if(!e)continue;let v=null;
@@ -196,7 +204,7 @@ function bwCls(p){if(p==null)return'flat';const g=S.settings.bwGoal||'gain';
   if(Math.abs(p)<0.05)return'flat';return(g==='gain'?p>0:p<0)?'up':'down'}
 const CLR={up:'#c8f560',down:'#ff6b6b',warn:'#ffd166',flat:'#8b94a5'};
 function goalSeg(){const g=S.settings.bwGoal||'gain';return`<div class="seg">${[['gain','Zunehmen'],['hold','Halten'],['lose','Abnehmen']].map(([k,l])=>`<button class="${g===k?'on':''}" data-act="bwgoal" data-v="${k}">${l}</button>`).join('')}</div>`}
-const fmtVal=(v,weighted=true)=>weighted?fmtW(Math.round(v*10)/10)+' kg':Math.round(v)+' Wdh.';
+const fmtVal=(v,weighted=true,cardio=false)=>cardio?'Stufe '+fmtW(Math.round(v*10)/10):weighted?fmtW(Math.round(v*10)/10)+' kg':Math.round(v)+' Wdh.';
 const shortD=s=>parseD(s).toLocaleDateString('de-DE',{day:'numeric',month:'short'});
 function chartSVG(series){
   const W=340,H=170,hasR=series.some(s=>s.axis==='r'),pL=34,pR=hasR?34:8,pT=8,pB=20;
@@ -228,9 +236,9 @@ function viewStatistik(){
   const exs=[];const seen=new Set();
   for(const w of ws)for(const e of w.entries)if(!seen.has(e.exId)){seen.add(e.exId);const sr=exSeries(e.exId);if(sr.points.length)exs.push({id:e.exId,name:exName(e.exId,e.name),...sr,rp:inRange(sr.points)})}
   exs.forEach(x=>x.p=pct(x.rp));
-  const withP=exs.filter(x=>x.p!=null);const avg=withP.length?withP.reduce((a,x)=>a+x.p,0)/withP.length:null;
+  const withP=exs.filter(x=>x.p!=null&&!x.cardio);const avg=withP.length?withP.reduce((a,x)=>a+x.p,0)/withP.length:null;
   const wr=ws.filter(w=>w.date>=c);const weeks=Math.max(1,c?Math.round((parseD(today())-parseD(c))/(7*864e5)):Math.round((parseD(today())-parseD(ws[ws.length-1].date))/(7*864e5))+1);
-  h+=`<div class="card stat3"><div><b class="${strengthCls(avg)}">${avg==null?'–':(avg>0?'+':'')+avg.toFixed(1).replace('.',',')+'%'}</b><span class="muted sm">Ø Kraft</span></div><div><b>${wr.length}</b><span class="muted sm">Trainings</span></div><div><b>${(wr.length/weeks).toFixed(1).replace('.',',')}</b><span class="muted sm">pro Woche</span></div></div>`;
+  h+=`<div class="card stat3"><div><b class="${strengthCls(avg)}">${avg==null?'–':(avg>0?'+':'')+avg.toFixed(1).replace('.',',')+'%'}</b><span class="muted sm">Ø Kraft</span></div><div><b>${wr.length}</b><span class="muted sm">Trainings</span></div><div><b>${(wr.length/weeks).toFixed(1).replace('.',',')}</b><span class="muted sm">pro Woche</span></div><div><b>${(()=>{const d=wr.filter(w=>w.durationMin);return d.length?Math.round(d.reduce((a,w)=>a+w.durationMin,0)/d.length)+"'":"–"})()}</b><span class="muted sm">Ø Dauer</span></div></div>`;
   // Körpergewicht
   const bwAll=bwSeries(),bw=inRange(bwAll),bp=pct(bw),bc=bwCls(bp),cur=lastBW(),tgt=S.settings.bwTarget;
   h+=`<h2>Körpergewicht</h2><div class="card">${goalSeg()}`;
@@ -244,18 +252,19 @@ function viewStatistik(){
   }
   h+=`</div>`;
   // Kraft
-  h+=`<h2>Kraft</h2>`;
+  h+=`<h2>Kraft & Cardio</h2>`;
   if(!exs.length)h+=`<div class="card muted sm">Noch keine Sätze gespeichert.</div>`;
   else{
     if(!statEx||!exs.some(x=>x.id===statEx))statEx=exs.slice().sort((a,b)=>b.points.length-a.points.length)[0].id;
-    const x=exs.find(x=>x.id===statEx),cls=strengthCls(x.p),last=x.points[x.points.length-1].v,showBW=S.settings.showBW!==false&&bw.length>0;
+    const x=exs.find(x=>x.id===statEx),cls=strengthCls(x.p),last=x.points[x.points.length-1].v,showBW=!x.cardio&&S.settings.showBW!==false&&bw.length>0;
     h+=`<div class="card"><select data-act="statex">${exs.map(e=>`<option value="${e.id}" ${e.id===statEx?'selected':''}>${esc(e.name)}</option>`).join('')}</select>
-    <div class="kpi"><span class="v">${fmtVal(last,x.weighted)}</span><span class="trend ${cls}">${fmtPct(x.p)}</span></div>
-    <div class="muted sm">${x.weighted?'geschätztes Maximum (1RM)':'max. Wiederholungen'}${x.rp.length>=2?` · ${fmtVal(x.rp[0].v,x.weighted)} → ${fmtVal(x.rp[x.rp.length-1].v,x.weighted)}`:''}</div>
-    ${x.rp.length?chartSVG([{points:x.rp,color:CLR[cls],axis:'l'},...(showBW?[{points:bw,color:'#8b94a5',axis:'r',dashed:true}]:[])]):`<div class="muted sm" style="margin-top:8px">Keine Werte in diesem Zeitraum.</div>`}
+    <div class="kpi"><span class="v">${fmtVal(last,x.weighted,x.cardio)}</span><span class="trend ${cls}">${fmtPct(x.p)}</span></div>
+    <div class="muted sm">${x.cardio?`höchste Stufe · zuletzt ${fmtW(x.points[x.points.length-1].t)} Min.`:x.weighted?'geschätztes Maximum (1RM)':'max. Wiederholungen'}${x.rp.length>=2?` · ${fmtVal(x.rp[0].v,x.weighted,x.cardio)} → ${fmtVal(x.rp[x.rp.length-1].v,x.weighted,x.cardio)}`:''}</div>
+    ${x.rp.length?chartSVG([{points:x.rp,color:CLR[cls],axis:'l'},...(x.cardio?[{points:x.rp.map(p=>({date:p.date,v:p.t})),color:'#7cc4ff',axis:'r',dashed:true}]:[]),...(showBW?[{points:bw,color:'#8b94a5',axis:'r',dashed:true}]:[])]):`<div class="muted sm" style="margin-top:8px">Keine Werte in diesem Zeitraum.</div>`}
+    ${x.cardio&&x.rp.length?`<div class="legend"><span><i style="background:${CLR[cls]}"></i>Stufe (links)</span><span><i style="background:#7cc4ff"></i>Minuten (rechts)</span></div>`:''}
     ${showBW&&x.rp.length?`<div class="legend"><span><i style="background:${CLR[cls]}"></i>${x.weighted?'1RM (links)':'Wdh. (links)'}</span><span><i style="background:#8b94a5"></i>Körpergewicht (rechts)</span></div>`:''}
-    ${bw.length?`<label class="toggle"><input type="checkbox" data-act="showbw" ${showBW?'checked':''}>Körpergewicht im Graph anzeigen</label>`:''}</div>`;
-    h+=`<div class="card ex-list">${exs.slice().sort((a,b)=>(b.p??-1e9)-(a.p??-1e9)).map(e=>`<button class="r" data-act="selex" data-id="${e.id}"><span class="grow">${esc(e.name)}</span><span class="muted sm">${fmtVal(e.points[e.points.length-1].v,e.weighted)}</span><span class="pill ${strengthCls(e.p)}"><span class="${strengthCls(e.p)}">${e.p==null?'–':(e.p>0?'+':'')+e.p.toFixed(1).replace('.',',')+'%'}</span></span></button>`).join('')}</div>`;
+    ${bw.length&&!x.cardio?`<label class="toggle"><input type="checkbox" data-act="showbw" ${showBW?'checked':''}>Körpergewicht im Graph anzeigen</label>`:''}</div>`;
+    h+=`<div class="card ex-list">${exs.slice().sort((a,b)=>(b.p??-1e9)-(a.p??-1e9)).map(e=>`<button class="r" data-act="selex" data-id="${e.id}"><span class="grow">${esc(e.name)}</span><span class="muted sm">${fmtVal(e.points[e.points.length-1].v,e.weighted,e.cardio)}</span><span class="pill ${strengthCls(e.p)}"><span class="${strengthCls(e.p)}">${e.p==null?'–':(e.p>0?'+':'')+e.p.toFixed(1).replace('.',',')+'%'}</span></span></button>`).join('')}</div>`;
     h+=`<div class="muted sm" style="padding:0 4px 8px">Das 1RM schätzt, was du einmal schaffen würdest (Gewicht × Wdh. umgerechnet). So sind z. B. 80 kg × 8 und 85 kg × 5 vergleichbar. Die Prozente vergleichen das erste mit dem letzten Training im gewählten Zeitraum.</div>`;
   }
   return h;
@@ -277,24 +286,26 @@ function viewTraining(){
 }
 function placeholders(en){
   const last=lastFor(en.exId);const out=[];
+  const c=isCardio(en.exId);
   en.sets.forEach((s,j)=>{const l=last?.sets[j];const prev=out[j-1],prevS=en.sets[j-1];
-    const w=l&&l.w!=null?fmtW(l.w):prevS&&prevS.w!==''?prevS.w:prev?prev.w:'';
-    const r=l?String(l.r):prevS&&prevS.r!==''?prevS.r:prev?prev.r:'';
+    const lw=l?(c?l.l:l.w):null,lr=l?(c?l.t:l.r):null;
+    const w=lw!=null?fmtW(lw):prevS&&prevS.w!==''?prevS.w:prev?prev.w:'';
+    const r=lr!=null?fmtW(lr):prevS&&prevS.r!==''?prevS.r:prev?prev.r:'';
     out.push({w,r})});
   return out;
 }
 function viewActive(){
   const a=S.active,plan=planById(a.planId);
-  let h=`<div class="card"><div class="between"><div><div class="ex-title" style="font-size:22px">${esc(plan?plan.name:'Freies Training')}</div><input type="date" class="date-in" data-act="adate" value="${esc(a.date)}" style="margin-top:6px"><label class="bw-in muted sm">Körpergewicht<input inputmode="decimal" data-act="bw" value="${esc(a.bw||'')}" placeholder="${lastBW()!=null?fmtW(lastBW()):'kg'}">kg</label></div><button class="ghost danger sm" data-act="cancel" data-confirm="1">Verwerfen</button></div></div>`;
+  let h=`<div class="card"><div class="between"><div><div class="ex-title" style="font-size:22px">${esc(plan?plan.name:'Freies Training')}</div><div class="timer" id="timer">${fmtTimer()}</div><input type="date" class="date-in" data-act="adate" value="${esc(a.date)}" style="margin-top:6px"><label class="bw-in muted sm">Körpergewicht<input inputmode="decimal" data-act="bw" value="${esc(a.bw||'')}" placeholder="${lastBW()!=null?fmtW(lastBW()):'kg'}">kg</label></div><button class="ghost danger sm" data-act="cancel" data-confirm="1">Verwerfen</button></div></div>`;
   a.entries.forEach((en,i)=>{
-    const last=lastFor(en.exId),best=bestFor(en.exId),ph=placeholders(en);
+    const c=isCardio(en.exId),last=lastFor(en.exId),best=c?null:bestFor(en.exId),ph=placeholders(en);
     h+=`<div class="card"><div class="between"><div class="ex-title">${esc(exName(en.exId))}</div>${best!=null?`<span class="muted sm">Bestwert ${fmtW(best)} kg</span>`:''}</div>`;
     h+=`<div class="last">${last?`Letztes Mal (${daysAgo(last.date)}): <b>${last.sets.map(setStr).join(' · ')}</b>`:'Erstes Mal – leg einfach los'}</div>`;
-    h+=`<div class="grid set-head"><span style="text-align:center">#</span><span style="text-align:center">kg</span><span style="text-align:center">Wdh.</span><span></span></div>`;
+    h+=`<div class="grid set-head"><span style="text-align:center">#</span><span style="text-align:center">${c?'Stufe':'kg'}</span><span style="text-align:center">${c?'Minuten':'Wdh.'}</span><span></span></div>`;
     en.sets.forEach((s,j)=>{
       const isPr=s.done&&best!=null&&num(s.w)!=null&&num(s.w)>best;
-      h+=`<div class="grid set ${s.done?'done':''}"><span class="n">${j+1}</span><input inputmode="decimal" data-act="w" data-i="${i}" data-j="${j}" value="${esc(s.w)}" placeholder="${esc(ph[j].w)}"><input inputmode="numeric" pattern="[0-9]*" data-act="r" data-i="${i}" data-j="${j}" value="${esc(s.r)}" placeholder="${esc(ph[j].r)}"><button class="chk" data-act="check" data-i="${i}" data-j="${j}">✓</button></div>${isPr?`<div class="pr">🏆 Neuer Bestwert!</div>`:''}`});
-    h+=`<div class="actions"><button class="sm" data-act="addset" data-i="${i}">+ Satz</button>${en.sets.length?`<button class="sm" data-act="delset" data-i="${i}">– Satz</button>`:''}<span class="grow"></span><button class="ghost sm" data-act="up" data-i="${i}">↑</button><button class="ghost sm" data-act="down" data-i="${i}">↓</button><button class="ghost sm danger" data-act="rmex" data-i="${i}" data-confirm="1">Entfernen</button></div></div>`;
+      h+=`<div class="grid set ${s.done?'done':''}"><span class="n">${j+1}</span><input inputmode="decimal" data-act="w" data-i="${i}" data-j="${j}" value="${esc(s.w)}" placeholder="${esc(ph[j].w)}"><input inputmode="${c?'decimal':'numeric'}" ${c?'':'pattern="[0-9]*"'} data-act="r" data-i="${i}" data-j="${j}" value="${esc(s.r)}" placeholder="${esc(ph[j].r)}"><button class="chk" data-act="check" data-i="${i}" data-j="${j}">✓</button></div>${isPr?`<div class="pr">🏆 Neuer Bestwert!</div>`:''}`});
+    h+=`<div class="actions"><button class="sm" data-act="addset" data-i="${i}">+ ${c?'Runde':'Satz'}</button>${en.sets.length?`<button class="sm" data-act="delset" data-i="${i}">– ${c?'Runde':'Satz'}</button>`:''}<span class="grow"></span><button class="ghost sm" data-act="up" data-i="${i}">↑</button><button class="ghost sm" data-act="down" data-i="${i}">↓</button><button class="ghost sm danger" data-act="rmex" data-i="${i}" data-confirm="1">Entfernen</button></div></div>`;
   });
   const used=new Set(a.entries.map(e=>e.exId));
   h+=`<div class="card"><select data-act="addex"><option value="">+ Übung hinzufügen…</option>${exOptions(used)}</select></div>`;
@@ -308,9 +319,9 @@ function exOptions(exclude){
 function viewVerlauf(){
   const ws=workoutsSorted();
   if(!ws.length)return`<div class="empty">Noch keine Trainings gespeichert.<br>Starte dein erstes unter „Training“.</div>`;
-  return ws.map(w=>`<details class="card"><summary><div class="between"><div><div class="ex-title">${esc(w.planName||'Training')}</div><div class="muted sm">${fmtDate(w.date)}${w.bodyweight!=null?` · ${fmtW(w.bodyweight)} kg KG`:''} · ${w.entries.length} ${w.entries.length===1?'Übung':'Übungen'} · ${setCount(w)} ${setCount(w)===1?'Satz':'Sätze'}</div></div><div style="text-align:right"><div style="font-weight:700">${fmtInt(volume(w))} kg</div><div class="muted sm">Volumen</div></div></div></summary>
+  return ws.map(w=>`<details class="card"><summary><div class="between"><div><div class="ex-title">${esc(w.planName||'Training')}</div><div class="muted sm">${fmtDate(w.date)}${w.durationMin?` · ${fmtDur(w.durationMin)}`:''}${w.bodyweight!=null?` · ${fmtW(w.bodyweight)} kg KG`:''} · ${w.entries.length} ${w.entries.length===1?'Übung':'Übungen'} · ${setCount(w)} ${setCount(w)===1?'Satz':'Sätze'}</div></div><div style="text-align:right">${volume(w)>0||!cardioMin(w)?`<div style="font-weight:700">${fmtInt(volume(w))} kg</div><div class="muted sm">Volumen</div>`:`<div style="font-weight:700">${fmtW(cardioMin(w))} Min.</div><div class="muted sm">Cardio</div>`}</div></div></summary>
   <div class="hist-sets">${w.entries.map(e=>`<div><span>${esc(exName(e.exId,e.name))}</span><span>${e.sets.map(setStr).join(', ')}</span></div>`).join('')}</div>
-  <div class="actions"><span class="grow"></span><button class="ghost sm danger" data-act="delw" data-id="${w.id}" data-confirm="1">Training löschen</button></div></details>`).join('');
+  <div class="actions"><label class="row muted sm">Dauer<input inputmode="numeric" data-act="dur" data-id="${w.id}" value="${w.durationMin??''}" placeholder="–" style="width:70px;text-align:center;padding:6px">Min.</label><span class="grow"></span><button class="ghost sm danger" data-act="delw" data-id="${w.id}" data-confirm="1">Training löschen</button></div></details>`).join('');
 }
 function viewPlaene(){
   let h=`<h2>Trainingspläne</h2>`;
@@ -353,16 +364,16 @@ window.addEventListener('hashchange',()=>{exportText=null;render();window.scroll
 /* ---------- Actions ---------- */
 function startWorkout(planId){
   const p=planById(planId);
-  const entries=(p?p.exerciseIds:[]).filter(exById).map(exId=>{const l=lastFor(exId);return{exId,sets:Array.from({length:l?l.sets.length:3},()=>({w:'',r:'',done:false}))}});
+  const entries=(p?p.exerciseIds:[]).filter(exById).map(exId=>({exId,sets:defaultSets(exId)}));
   S.active={id:uid(),planId:p?p.id:null,date:today(),startedAt:Date.now(),entries};touchCore();render();window.scrollTo(0,0);
 }
 function finishWorkout(){
   const a=S.active,plan=planById(a.planId);
-  const entries=a.entries.map(en=>({exId:en.exId,name:exName(en.exId),sets:en.sets.map(s=>({w:num(s.w),r:num(s.r)})).filter(s=>s.r!=null&&s.r>0)})).filter(e=>e.sets.length);
+  const entries=a.entries.map(en=>{const c=isCardio(en.exId);return{exId:en.exId,name:exName(en.exId),cardio:c||undefined,sets:c?en.sets.map(s=>({l:num(s.w),t:num(s.r)})).filter(s=>s.t!=null&&s.t>0):en.sets.map(s=>({w:num(s.w),r:num(s.r)})).filter(s=>s.r!=null&&s.r>0)}}).filter(e=>e.sets.length);
   if(!entries.length){toast('Noch keine Sätze eingetragen');return}
-  const bwv=num(a.bw);const w={id:a.id,planId:a.planId,planName:plan?plan.name:'Freies Training',date:a.date||today(),startedAt:a.startedAt,finishedAt:Date.now(),entries,bodyweight:bwv!=null&&bwv>20&&bwv<400?bwv:null};
+  const bwv=num(a.bw);const w={id:a.id,planId:a.planId,planName:plan?plan.name:'Freies Training',date:a.date||today(),startedAt:a.startedAt,finishedAt:Date.now(),durationMin:a.date===today()?Math.max(1,Math.round((Date.now()-a.startedAt)/60000)):null,entries,bodyweight:bwv!=null&&bwv>20&&bwv<400?bwv:null};
   S.workouts.push(w);S.active=null;touchWorkout(w);touchCore();render();window.scrollTo(0,0);
-  toast(`Gespeichert 💪 ${setCount(w)} Sätze · ${fmtInt(volume(w))} kg`);
+  toast(`Gespeichert 💪 ${w.durationMin?fmtDur(w.durationMin)+' · ':''}${setCount(w)} ${setCount(w)===1?'Satz':'Sätze'}`);
 }
 function exportJSON(){return JSON.stringify({app:'gym-tracker',version:1,exportedAt:new Date().toISOString(),data:{exercises:S.exercises,plans:S.plans,workouts:S.workouts.filter(w=>!w.deleted),settings:S.settings}},null,1)}
 async function doImport(){
@@ -389,7 +400,7 @@ document.addEventListener('click',async ev=>{
     case'cancel':S.active=null;touchCore();render();toast('Training verworfen');break;
     case'finish':finishWorkout();break;
     case'check':{const en=a.entries[i],s=en.sets[j];
-      if(!s.done){const ph=placeholders(en)[j];if(s.w==='')s.w=ph.w;if(s.r==='')s.r=ph.r;if(s.r===''){toast('Erst Wiederholungen eintragen');return}}
+      if(!s.done){const ph=placeholders(en)[j];if(s.w==='')s.w=ph.w;if(s.r==='')s.r=ph.r;if(s.r===''){toast(isCardio(en.exId)?'Erst Minuten eintragen':'Erst Wiederholungen eintragen');return}}
       s.done=!s.done;touchCore();render();break}
     case'addset':{const en=a.entries[i],l=en.sets[en.sets.length-1];en.sets.push({w:l?l.w:'',r:'',done:false});touchCore();render();break}
     case'delset':a.entries[i].sets.pop();touchCore();render();break;
@@ -431,8 +442,9 @@ document.addEventListener('change',ev=>{
     case'statex':statEx=el.value;render();break;
     case'showbw':S.settings.showBW=el.checked;save();render();break;
     case'bwtarget':render();break;
+    case'dur':{const w=S.workouts.find(w=>w.id===id),v=num(el.value);if(w){w.durationMin=v!=null&&v>0?Math.round(v):null;touchWorkout(w)}break}
     case'adate':if(el.value){S.active.date=el.value;touchCore()}break;
-    case'addex':if(el.value){const l=lastFor(el.value);S.active.entries.push({exId:el.value,sets:Array.from({length:l?l.sets.length:3},()=>({w:'',r:'',done:false}))});touchCore();render()}break;
+    case'addex':if(el.value){S.active.entries.push({exId:el.value,sets:defaultSets(el.value)});touchCore();render()}break;
     case'padd':if(el.value){planById(id).exerciseIds.push(el.value);touchCore();render()}break;
     case'pname':{const v=el.value.trim();if(v){planById(id).name=v;touchCore()}else el.value=planById(id).name;break}
     case'exname':{const v=el.value.trim(),e=exById(id);if(v){e.name=v;touchCore()}else el.value=e.name;break}
@@ -440,6 +452,8 @@ document.addEventListener('change',ev=>{
   }
 });
 
+function fmtTimer(){if(!S.active)return'';const sec=Math.max(0,Math.floor((Date.now()-S.active.startedAt)/1000)),h=Math.floor(sec/3600),m=Math.floor(sec/60)%60,x=sec%60;return(h?h+':'+pad(m):m)+':'+pad(x)}
+setInterval(()=>{const t=document.getElementById('timer');if(t&&S.active)t.textContent=fmtTimer()},1000);
 render();
 if('serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('sw.js').catch(()=>{});
 </script>

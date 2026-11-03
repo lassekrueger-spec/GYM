@@ -84,6 +84,8 @@ details summary{list-style:none;cursor:pointer}
 details summary::-webkit-details-marker{display:none}
 .plist .it{display:flex;align-items:center;gap:6px;padding:7px 0;border-top:1px solid var(--line)}
 .plist .it:first-child{border-top:0}
+.uni-pill{font-size:11px;font-weight:700;padding:5px 8px;border-radius:999px;background:transparent;border:1px solid var(--line);color:var(--mute);flex:none}
+.uni-pill.on{background:var(--acc);border-color:var(--acc);color:var(--accInk)}
 .plist .it .grow{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .icon-btn{background:var(--card2);width:34px;height:34px;padding:0;border-radius:9px;font-size:15px;flex:none}
 .lib-row{display:grid;grid-template-columns:1fr 112px 34px;gap:6px;margin-bottom:6px}
@@ -708,10 +710,11 @@ function viewPlaene(){
   let h=`<h2>Trainingspläne</h2>`;
   S.plans.forEach(p=>{
     h+=`<div class="card"><div class="row" style="margin-bottom:8px"><input class="grow" data-act="pname" data-id="${p.id}" value="${esc(p.name)}" style="font-weight:700;font-size:18px"><button class="icon-btn danger" data-act="delplan" data-id="${p.id}" data-confirm="1" title="Plan löschen">🗑</button></div><div class="plist">`;
-    p.exerciseIds.forEach((eid,k)=>{h+=`<div class="it"><span class="grow">${esc(exName(eid))}</span><button class="icon-btn" data-act="pup" data-id="${p.id}" data-k="${k}">↑</button><button class="icon-btn" data-act="pdown" data-id="${p.id}" data-k="${k}">↓</button><button class="icon-btn" data-act="prm" data-id="${p.id}" data-k="${k}">✕</button></div>`});
+    p.exerciseIds.forEach((eid,k)=>{const ex=exById(eid),uc=!!ex?.uni,cardio=ex?.group==='Cardio';h+=`<div class="it"><span class="grow">${esc(exName(eid))}</span>${cardio?'':`<button class="uni-pill ${uc?'on':''}" data-act="exuni" data-id="${eid}">1-armig</button>`}<button class="icon-btn" data-act="pup" data-id="${p.id}" data-k="${k}">↑</button><button class="icon-btn" data-act="pdown" data-id="${p.id}" data-k="${k}">↓</button><button class="icon-btn" data-act="prm" data-id="${p.id}" data-k="${k}">✕</button></div>`});
     if(!p.exerciseIds.length)h+=`<div class="muted sm" style="padding:6px 0">Noch keine Übungen</div>`;
     h+=`</div><select data-act="padd" data-id="${p.id}" style="margin-top:8px"><option value="">+ Übung hinzufügen…</option>${exOptions(new Set(p.exerciseIds))}</select></div>`;
   });
+  if(S.plans.length)h+=`<div class="muted sm" style="padding:0 4px 12px">„1-armig“ markiert Übungen, die du mit einem Arm oder Bein machst. Im Training trägst du dann links und rechts getrennt ein.</div>`;
   h+=`<button class="block" data-act="newplan">+ Neuer Plan</button>`;
   h+=`<h2>Übungsbibliothek</h2><div class="card"><div class="lib-row"><input id="newExName" placeholder="Neue Übung, z. B. Dips"><select id="newExGroup">${GROUPS.map(g=>`<option>${g}</option>`).join('')}</select><button class="icon-btn primary" data-act="newex">+</button></div></div>`;
   for(const g of GROUPS){const xs=S.exercises.filter(e=>e.group===g).sort((a,b)=>a.name.localeCompare(b.name,'de'));if(!xs.length)continue;
@@ -792,6 +795,7 @@ document.addEventListener('click',async ev=>{
     case'start':startWorkout(id);break;
     case'cancel':S.active=null;touchCore();render();toast('Training verworfen');break;
     case'finish':finishWorkout();break;
+    case'exuni':{const ex=exById(id);if(ex){ex.uni=!ex.uni||undefined;if(S.active)S.active.entries.forEach(en=>{if(en.exId===id){en.uni=ex.uni;en.sets.forEach(s=>{if(s.w2==null)s.w2='';if(s.r2==null)s.r2=''})}});touchCore();render();toast(ex.uni?`„${ex.name}“ ist jetzt einarmig`:`„${ex.name}“ wieder beidarmig`)}break}
     case'uni':{const en=a.entries[i];en.uni=!en.uni||undefined;en.sets.forEach(s=>{if(s.w2==null)s.w2='';if(s.r2==null)s.r2=''});const ex=exById(en.exId);if(ex){ex.uni=en.uni}touchCore();render();toast(en.uni?'Einarmig: links und rechts getrennt – merkt sich die App':'Wieder beidarmig');break}
     case'check':{const en=a.entries[i],s=en.sets[j];
       if(!s.done){const ph=placeholders(en)[j];if(s.w==='')s.w=ph.w;if(s.r==='')s.r=ph.r;

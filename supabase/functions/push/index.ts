@@ -41,10 +41,17 @@ Deno.serve(async (req) => {
     const c = await config();
     if (req.headers.get("x-push-secret") !== c.push_secret) return new Response("forbidden", { status: 403 });
     const p = await req.json();
+    // Optional nur an ein Gerät eines Nutzers schicken (zum Testen)
+    const only = async (t: Target[]) => {
+      if (!p.only_user) return t;
+      const { data } = await sb.from("push_subscriptions").select("endpoint").eq("user_id", p.only_user);
+      const eps = new Set((data ?? []).map((r) => r.endpoint));
+      return t.filter((x) => eps.has(x.endpoint));
+    };
     if (p.type === "workout" && p.user_id) {
       const { data, error } = await sb.rpc("push_targets_workout", { p_user: p.user_id });
       if (error) throw error;
-      return Response.json(await send(data as Target[], "workout-" + p.user_id));
+      return Response.json(await send(await only(data as Target[]), "workout-" + p.user_id));
     }
     if (p.type === "test" && p.user_id) {
       const { data, error } = await sb.from("push_subscriptions").select("endpoint,p256dh,auth").eq("user_id", p.user_id);
@@ -57,7 +64,7 @@ Deno.serve(async (req) => {
       if (hour !== 19 && !p.force) return Response.json({ skipped: true, hour });
       const { data, error } = await sb.rpc("push_targets_weekly");
       if (error) throw error;
-      return Response.json(await send(data as Target[], "weekly"));
+      return Response.json(await send(await only(data as Target[]), "weekly"));
     }
     return new Response("bad request", { status: 400 });
   } catch (e) {

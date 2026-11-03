@@ -381,7 +381,7 @@ function chartSVG(series){
 }
 function viewStatistik(){
   const ws=workoutsSorted();
-  if(!ws.length)return`<div class="empty">Hier erscheinen deine Graphen,<br>sobald du ein paar Trainings gespeichert hast.</div>`;
+  if(!ws.length)return`<a href="#rueckblick" class="plan-btn" style="text-decoration:none;color:inherit"><div><div style="font-weight:700">📊 Wochenrückblick</div><div class="meta">Kommt jeden Sonntag – schau dir schon mal ein Beispiel an</div></div><span class="go">›</span></a><div class="empty">Hier erscheinen deine Graphen,<br>sobald du ein paar Trainings gespeichert hast.</div>`;
   const rng=S.settings.statRange||'3m',c=cutoff();
   let h='';
   if(isSunday())h+=`<h2 style="margin-top:4px">Dein Wochenrückblick</h2>`+reviewHTML()+`<h2>Statistik</h2>`;
@@ -427,7 +427,7 @@ function viewStatistik(){
 }
 
 /* ---------- Wochenrückblick ---------- */
-const REV={key:null,ranks:null,loading:false};
+const REV={key:null,ranks:null,loading:false,demo:false};
 const isSunday=()=>new Date().getDay()===0;
 // Sonntags: die laufende Woche, sonst die letzte abgeschlossene
 function reviewStart(){const s=weekStart(new Date());if(!isSunday())s.setDate(s.getDate()-7);return s}
@@ -442,13 +442,27 @@ async function loadReviewRanks(from,to){if(!USER||!sb||REV.loading||REV.key===fr
       out.push({name:g.name,rank:data.filter(r=>r.trainings>me.trainings).length+1,tot:data.length,best})}
     REV.ranks=out}catch(e){REV.ranks=[]}
   REV.loading=false;const t=curTab();if(t==='rueckblick'||t==='statistik')render()}
+function demoWorkouts(a){
+  const d=o=>{const x=new Date(a);x.setDate(a.getDate()+o);return ymd(x)};
+  const mk=(o,plan,bw,dur,ents)=>({id:'demo'+o,planName:plan,date:d(o),durationMin:dur,bodyweight:bw,entries:ents.map(([n,g,sets])=>({exId:'demo-'+n,name:n,group:g,cardio:g==='Cardio'||undefined,sets:sets.map(([w,r])=>g==='Cardio'?{l:w,t:r}:{w,r})}))});
+  return[
+    mk(6,'Push',null,40,[['Bankdrücken','Brust',[[80,8],[80,8]]],['Laufband','Cardio',[[8,15]]]]),
+    mk(5,'Beine',81.9,70,[['Kniebeugen','Beine',[[105,5],[100,6],[100,6]]],['Beinpresse','Beine',[[160,10],[160,10]]]]),
+    mk(3,'Pull',null,61,[['Latzug','Rücken',[[62.5,9],[60,10],[60,9]]],['Bizepscurls','Bizeps',[[14,10],[14,10]]],['Langhantelrudern','Rücken',[[60,10],[60,10]]]]),
+    mk(1,'Push',81.6,66,[['Bankdrücken','Brust',[[82.5,6],[80,8],[80,7]]],['Schulterdrücken','Schultern',[[40,8],[40,8]]],['Seitheben','Schultern',[[10,12],[10,12],[10,10]]]]),
+    mk(-3,'Beine',null,58,[['Kniebeugen','Beine',[[100,6],[100,5]]]]),
+    mk(-5,'Pull',null,55,[['Latzug','Rücken',[[60,10],[60,9]]],['Bizepscurls','Bizeps',[[14,10],[14,9]]]]),
+    mk(-7,'Push',81.2,62,[['Bankdrücken','Brust',[[80,8],[80,7],[77.5,8]]],['Seitheben','Schultern',[[10,12],[10,12]]]]),
+    mk(-10,'Beine',null,57,[['Kniebeugen','Beine',[[97.5,6]]]]),mk(-12,'Pull',null,50,[['Latzug','Rücken',[[57.5,10]]]]),mk(-14,'Push',null,55,[['Bankdrücken','Brust',[[77.5,8]]]])
+  ].sort((x,y)=>y.date.localeCompare(x.date))}
 function reviewHTML(){
-  const ws=workoutsSorted(),a=reviewStart(),W=weekStats(ws,a),pa=new Date(a);pa.setDate(a.getDate()-7);const P=weekStats(ws,pa);
+  const a=reviewStart(),ws=REV.demo?demoWorkouts(a):workoutsSorted(),W=weekStats(ws,a),pa=new Date(a);pa.setDate(a.getDate()-7);const P=weekStats(ws,pa);
   const goal=S.settings.weeklyGoal||3,done=W.n>=goal,live=isSunday();
   const range=`${a.toLocaleDateString('de-DE',{day:'numeric',month:'short'})} – ${W.end.toLocaleDateString('de-DE',{day:'numeric',month:'short'})}`;
   // Serie: Wochen am Stück mit erreichtem Ziel
   let streak=0;const c=new Date(a);for(let i=0;i<520;i++){if(weekStats(ws,c).n>=goal){streak++;c.setDate(c.getDate()-7)}else break}
-  let h=`<div class="card rev-hero"><div class="between"><div class="muted sm" style="font-weight:700;letter-spacing:.06em;text-transform:uppercase">KW ${weekNo(a)} · ${range}</div>${live?'<span class="badge" style="margin:0">diese Woche</span>':''}</div>
+  let h=REV.demo?`<div class="card between warn sm" style="font-weight:600"><span>👀 Beispieldaten – nicht deine echten Werte</span><button class="sm" data-act="rev-demo">Meine Daten</button></div>`:'';
+  h+=`<div class="card rev-hero"><div class="between"><div class="muted sm" style="font-weight:700;letter-spacing:.06em;text-transform:uppercase">KW ${weekNo(a)} · ${range}</div>${live?'<span class="badge" style="margin:0">diese Woche</span>':''}</div>
   <div class="between" style="margin-top:12px;align-items:flex-end"><div><div class="big">${W.n}<span class="muted" style="font-size:22px"> / ${goal}</span></div><div class="muted sm" style="margin-top:4px">Trainings</div></div>
   <div style="text-align:right;font-weight:700">${done?'Wochenziel geschafft 🎉':W.n?`${goal-W.n} fehlten zum Ziel`:'Diese Woche Pause 😴'}${streak>1?`<div class="sm up" style="margin-top:2px">🔥 ${streak} Wochen in Folge</div>`:''}</div></div>
   <div class="rev-days">${['Mo','Di','Mi','Do','Fr','Sa','So'].map((d,i)=>{const x=new Date(a);x.setDate(a.getDate()+i);const t=W.w.filter(w=>w.date===ymd(x));return`<div><i class="${t.length?'on':''}">${t.length?esc((t[0].planName||'T')[0].toUpperCase()):''}</i>${d}</div>`}).join('')}</div></div>`;
@@ -463,7 +477,7 @@ function reviewHTML(){
     if(now!=null&&before!=null&&now>before)prs.push({n:exName(e.exId,e.name),now,before})}
   if(prs.length)h+=`<h2>Neue Bestwerte 🏆</h2><div class="card">${prs.map(p=>`<div class="rev-li"><span>${esc(p.n)}</span><span><b class="up">${fmtW(p.now)} kg</b> <span class="muted sm">vorher ${fmtW(p.before)}</span></span></div>`).join('')}</div>`;
   // Muskelgruppen
-  const mg={};for(const w of W.w)for(const e of w.entries){const g=exById(e.exId)?.group||'Sonstiges';if(g==='Cardio')continue;mg[g]=(mg[g]||0)+e.sets.length}
+  const mg={};for(const w of W.w)for(const e of w.entries){const g=exById(e.exId)?.group||e.group||'Sonstiges';if(g==='Cardio')continue;mg[g]=(mg[g]||0)+e.sets.length}
   const mgs=Object.entries(mg).sort((x,y)=>y[1]-x[1]);
   if(mgs.length){const mx=mgs[0][1];h+=`<h2>Sätze pro Muskelgruppe</h2><div class="card">${mgs.map(([g,n])=>`<div class="mg-row"><span>${esc(g)}</span><div class="bar"><i style="width:${Math.round(n/mx*100)}%"></i></div><b>${n}</b></div>`).join('')}</div>`}
   // Körpergewicht
@@ -471,10 +485,12 @@ function reviewHTML(){
   if(bwW.length){const last=bwW[bwW.length-1].bodyweight,prev=ws.find(w=>w.date<W.from&&w.bodyweight!=null)?.bodyweight;const d=prev!=null?Math.round((last-prev)*10)/10:null;const cls=d==null?'flat':bwCls(prev?d/prev*100:0);
     h+=`<h2>Körpergewicht</h2><div class="card between"><div class="rev-k">${fmtW(last)} kg</div><div class="sm ${cls}" style="font-weight:700">${d==null?'':d===0?'unverändert':(d>0?'+':'−')+fmtW(Math.abs(d))+' kg zur Vorwoche'}</div></div>`}
   // Gruppen
-  if(USER&&sb){loadReviewRanks(W.from,W.to);
+  if(REV.demo)h+=`<h2>Deine Gruppen</h2><div class="card"><div class="rev-li"><span><b>WEM</b><br><span class="muted sm">Du warst am fleißigsten 💪</span></span><span style="text-align:right;font-weight:800;font-size:18px">🥇 1.<span class="muted sm" style="font-weight:600"> von 4</span></span></div></div>`;
+  else if(USER&&sb){loadReviewRanks(W.from,W.to);
     if(REV.ranks===null)h+=`<h2>Deine Gruppen</h2><div class="card muted sm">Lädt …</div>`;
     else if(REV.ranks.length)h+=`<h2>Deine Gruppen</h2><div class="card">${REV.ranks.map(g=>`<div class="rev-li"><span><b>${esc(g.name)}</b><br><span class="muted sm">${g.best.is_me?'Du warst am fleißigsten 💪':`Vorne: ${esc(g.best.display_name)} (${g.best.trainings})`}</span></span><span style="text-align:right;font-weight:800;font-size:18px">${g.rank<=3&&W.n>0?['🥇','🥈','🥉'][g.rank-1]+' ':''}${g.rank}.<span class="muted sm" style="font-weight:600"> von ${g.tot}</span></span></div>`).join('')}</div>`}
   if(!W.n)h+=`<div class="muted sm" style="padding:0 4px 12px">Neue Woche, neues Glück – ab Montag zählt's wieder.</div>`;
+  if(!REV.demo)h+=`<button class="ghost block sm" data-act="rev-demo">👀 Beispiel mit Testwerten ansehen</button>`;
   return h}
 function viewRueckblick(){return`<a href="#statistik" class="back">‹ Statistik</a>`+reviewHTML()}
 
@@ -729,7 +745,7 @@ function fixGap(){const st=navigator.standalone||matchMedia('(display-mode: stan
   document.documentElement.style.setProperty('--gap',g+'px');window.__gap=g}
 fixGap();window.addEventListener('resize',fixGap);window.addEventListener('orientationchange',()=>setTimeout(fixGap,300));
 function toTop(smooth){const sc=document.getElementById('scroller');sc&&sc.scrollTo({top:0,behavior:smooth?'smooth':'auto'})}
-window.addEventListener('hashchange',()=>{if(curTab()==='social'&&USER&&SOC.groups)setTimeout(()=>loadLB(),0);exportText=null;render();toTop()});
+window.addEventListener('hashchange',()=>{if(curTab()!=='rueckblick')REV.demo=false;if(curTab()==='social'&&USER&&SOC.groups)setTimeout(()=>loadLB(),0);exportText=null;render();toTop()});
 
 /* ---------- Actions ---------- */
 function startWorkout(planId){
@@ -808,6 +824,7 @@ document.addEventListener('click',async ev=>{
     case'soc-share':shareCode(b.dataset.id);break;
     case'soc-refresh':SOC.groups=null;SOC.lb={};render();pushCheck();break;
     case'push-on':enablePush();break;
+    case'rev-demo':REV.demo=!REV.demo;if(curTab()!=='rueckblick')location.hash='rueckblick';else render();toTop();break;
     case'push-off':await pushUnregister(true);PUSH.on=false;render();toast('Mitteilungen ausgeschaltet');break;
     case'push-hide':PUSH.hide=true;try{localStorage.setItem('gymtracker_pushhint','1')}catch(e){}render();break;
     case'syncnow':await pull();if(dirty.size)await flush();toast(syncState==='ok'?'Alles synchronisiert ✓':'Gerade keine Verbindung');break;

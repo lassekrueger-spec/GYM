@@ -56,7 +56,7 @@ Deno.serve(async (req) => {
     if (p.type === "test" && p.user_id) {
       const { data, error } = await sb.from("push_subscriptions").select("endpoint,p256dh,auth").eq("user_id", p.user_id);
       if (error) throw error;
-      return Response.json(await send((data ?? []).map((r) => ({ ...r, title: "Test 🔔", body: "Wenn du das liest, funktionieren die Mitteilungen." })), "test"));
+      return Response.json(await send((data ?? []).map((r) => ({ ...r, title: p.title ?? "Test 🔔", body: p.body ?? "Wenn du das liest, funktionieren die Mitteilungen." })), p.tag ?? "test"));
     }
     if (p.type === "weekly") {
       // Cron läuft 17 und 18 Uhr UTC – nur senden, wenn es in Deutschland 19 Uhr ist (Sommer-/Winterzeit)

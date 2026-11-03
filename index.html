@@ -134,6 +134,20 @@ details summary::-webkit-details-marker{display:none}
 .stat3{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;text-align:center}
 .stat3 b{display:block;font-size:18px;font-weight:800}
 .toggle{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--mute);margin-top:10px}
+.rev-hero{background:linear-gradient(140deg,#26351a 0%,#171a21 65%);border:1px solid #34461f}
+.rev-hero .big{font-size:44px;font-weight:800;letter-spacing:-.03em;line-height:1}
+.rev-days{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-top:14px;text-align:center;font-size:11px;color:var(--mute)}
+.rev-days i{display:block;height:34px;line-height:34px;border-radius:10px;background:var(--card2);margin-bottom:4px;font-style:normal;font-weight:800;font-size:14px;color:var(--accInk)}
+.rev-days i.on{background:var(--acc)}
+.rev-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.rev-grid .card{margin:0}
+.rev-k{font-size:22px;font-weight:800;letter-spacing:-.01em;margin:2px 0}
+.mg-row{display:grid;grid-template-columns:78px 1fr 30px;gap:8px;align-items:center;font-size:13px;padding:4px 0}
+.mg-row .bar{height:8px;border-radius:4px;background:var(--card2);overflow:hidden}
+.mg-row .bar i{display:block;height:100%;background:var(--acc);border-radius:4px}
+.mg-row b{text-align:right;font-variant-numeric:tabular-nums}
+.rev-li{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px solid var(--line);font-size:14px}
+.rev-li:first-child{border-top:0}
 .toggle input{-webkit-appearance:checkbox;appearance:auto;width:18px;height:18px;padding:0;margin:0;accent-color:var(--acc)}
 </style>
 </head>
@@ -306,7 +320,7 @@ const ICONS={
   plaene:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="5" y="4" width="14" height="17" rx="2.5"/><path d="M9 9h6M9 13h6M9 17h3"/></svg>',
   mehr:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="5.5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="18.5" cy="12" r="1.3"/></svg>'};
 const TABS=[['training','Training'],['statistik','Statistik'],['social','Social'],['plaene','Pläne'],['mehr','Mehr']];
-const curTab=()=>{const h=location.hash.slice(1);return h==='info'||h==='verlauf'||TABS.some(t=>t[0]===h)?h:'training'};
+const curTab=()=>{const h=location.hash.slice(1);return h==='info'||h==='verlauf'||h==='rueckblick'||TABS.some(t=>t[0]===h)?h:'training'};
 
 
 /* ---------- Statistik ---------- */
@@ -369,7 +383,10 @@ function viewStatistik(){
   const ws=workoutsSorted();
   if(!ws.length)return`<div class="empty">Hier erscheinen deine Graphen,<br>sobald du ein paar Trainings gespeichert hast.</div>`;
   const rng=S.settings.statRange||'3m',c=cutoff();
-  let h=`<div class="chips">${RANGES.map(([k,l])=>`<button class="chip ${k===rng?'on':''}" data-act="range" data-v="${k}">${l}</button>`).join('')}</div>`;
+  let h='';
+  if(isSunday())h+=`<h2 style="margin-top:4px">Dein Wochenrückblick</h2>`+reviewHTML()+`<h2>Statistik</h2>`;
+  else{const a=reviewStart();h+=`<a href="#rueckblick" class="plan-btn" style="text-decoration:none;color:inherit"><div><div style="font-weight:700">📊 Wochenrückblick</div><div class="meta">KW ${weekNo(a)} · ${weekStats(ws,a).n} Training${weekStats(ws,a).n===1?'':'s'} · der nächste kommt am Sonntag</div></div><span class="go">›</span></a>`}
+  h+=`<div class="chips">${RANGES.map(([k,l])=>`<button class="chip ${k===rng?'on':''}" data-act="range" data-v="${k}">${l}</button>`).join('')}</div>`;
   // Übungen mit Daten
   const exs=[];const seen=new Set();
   for(const w of ws)for(const e of w.entries)if(!seen.has(e.exId)){seen.add(e.exId);const sr=exSeries(e.exId);if(sr.points.length)exs.push({id:e.exId,name:exName(e.exId,e.name),...sr,rp:inRange(sr.points)})}
@@ -409,6 +426,57 @@ function viewStatistik(){
   return h;
 }
 
+/* ---------- Wochenrückblick ---------- */
+const REV={key:null,ranks:null,loading:false};
+const isSunday=()=>new Date().getDay()===0;
+// Sonntags: die laufende Woche, sonst die letzte abgeschlossene
+function reviewStart(){const s=weekStart(new Date());if(!isSunday())s.setDate(s.getDate()-7);return s}
+function weekNo(d){const t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));const day=t.getUTCDay()||7;t.setUTCDate(t.getUTCDate()+4-day);const y=new Date(Date.UTC(t.getUTCFullYear(),0,1));return Math.ceil(((t-y)/864e5+1)/7)}
+function weekStats(ws,a){const e=new Date(a);e.setDate(a.getDate()+6);const from=ymd(a),to=ymd(e);const w=ws.filter(x=>x.date>=from&&x.date<=to);
+  return{from,to,end:e,w,n:w.length,min:w.reduce((s,x)=>s+(x.durationMin||0),0),vol:w.reduce((s,x)=>s+volume(x),0),sets:w.reduce((s,x)=>s+setCount(x),0),cardio:w.reduce((s,x)=>s+cardioMin(x),0)}}
+function revDelta(c,p){if(!c&&!p)return'<span class="flat">–</span>';if(!p)return'<span class="up">neu</span>';const d=(c-p)/p*100;if(Math.abs(d)<0.5)return'<span class="flat">± 0 %</span>';return`<span class="${d>0?'up':'down'}">${d>0?'▲ +':'▼ −'}${Math.abs(Math.round(d))} %</span>`}
+async function loadReviewRanks(from,to){if(!USER||!sb||REV.loading||REV.key===from)return;REV.loading=true;REV.key=from;REV.ranks=null;
+  try{if(dirty.size)await flush();const{data:gs,error}=await sb.from('groups').select('id,name').order('created_at');if(error)throw error;const out=[];
+    for(const g of gs||[]){const{data}=await sb.rpc('group_leaderboard',{p_group:g.id,p_from:from,p_to:to,p_today:to});if(!data||data.length<2)continue;
+      const me=data.find(r=>r.is_me);if(!me)continue;const best=data.slice().sort((a,b)=>b.trainings-a.trainings||b.minutes-a.minutes)[0];
+      out.push({name:g.name,rank:data.filter(r=>r.trainings>me.trainings).length+1,tot:data.length,best})}
+    REV.ranks=out}catch(e){REV.ranks=[]}
+  REV.loading=false;const t=curTab();if(t==='rueckblick'||t==='statistik')render()}
+function reviewHTML(){
+  const ws=workoutsSorted(),a=reviewStart(),W=weekStats(ws,a),pa=new Date(a);pa.setDate(a.getDate()-7);const P=weekStats(ws,pa);
+  const goal=S.settings.weeklyGoal||3,done=W.n>=goal,live=isSunday();
+  const range=`${a.toLocaleDateString('de-DE',{day:'numeric',month:'short'})} – ${W.end.toLocaleDateString('de-DE',{day:'numeric',month:'short'})}`;
+  // Serie: Wochen am Stück mit erreichtem Ziel
+  let streak=0;const c=new Date(a);for(let i=0;i<520;i++){if(weekStats(ws,c).n>=goal){streak++;c.setDate(c.getDate()-7)}else break}
+  let h=`<div class="card rev-hero"><div class="between"><div class="muted sm" style="font-weight:700;letter-spacing:.06em;text-transform:uppercase">KW ${weekNo(a)} · ${range}</div>${live?'<span class="badge" style="margin:0">diese Woche</span>':''}</div>
+  <div class="between" style="margin-top:12px;align-items:flex-end"><div><div class="big">${W.n}<span class="muted" style="font-size:22px"> / ${goal}</span></div><div class="muted sm" style="margin-top:4px">Trainings</div></div>
+  <div style="text-align:right;font-weight:700">${done?'Wochenziel geschafft 🎉':W.n?`${goal-W.n} fehlten zum Ziel`:'Diese Woche Pause 😴'}${streak>1?`<div class="sm up" style="margin-top:2px">🔥 ${streak} Wochen in Folge</div>`:''}</div></div>
+  <div class="rev-days">${['Mo','Di','Mi','Do','Fr','Sa','So'].map((d,i)=>{const x=new Date(a);x.setDate(a.getDate()+i);const t=W.w.filter(w=>w.date===ymd(x));return`<div><i class="${t.length?'on':''}">${t.length?esc((t[0].planName||'T')[0].toUpperCase()):''}</i>${d}</div>`}).join('')}</div></div>`;
+  // Kennzahlen mit Vergleich zur Vorwoche
+  const tile=(l,v,d)=>`<div class="card"><div class="muted sm">${l}</div><div class="rev-k">${v}</div><div class="sm">${d}</div></div>`;
+  h+=`<div class="rev-grid">${tile('Trainingszeit',W.min?fmtDur(W.min):'–',revDelta(W.min,P.min))}${tile('Bewegtes Gewicht',W.vol?fmtInt(W.vol)+' kg':'–',revDelta(W.vol,P.vol))}${tile('Sätze',W.sets||'–',revDelta(W.sets,P.sets))}${tile('Cardio',W.cardio?fmtW(Math.round(W.cardio))+' Min.':'–',revDelta(W.cardio,P.cardio))}</div>`;
+  h+=`<div class="muted sm" style="padding:0 4px 12px;margin-top:-4px">Pfeile = Vergleich mit der Woche davor.</div>`;
+  // Neue Bestwerte
+  const prs=[];const seenEx=new Set();
+  for(const w of W.w)for(const e of w.entries){if(e.cardio||seenEx.has(e.exId))continue;seenEx.add(e.exId);
+    let now=null,before=null;for(const x of ws)for(const f of x.entries)if(f.exId===e.exId)for(const st of f.sets){if(st.w==null)continue;if(x.date>=W.from&&x.date<=W.to){if(now==null||st.w>now)now=st.w}else if(x.date<W.from&&(before==null||st.w>before))before=st.w}
+    if(now!=null&&before!=null&&now>before)prs.push({n:exName(e.exId,e.name),now,before})}
+  if(prs.length)h+=`<h2>Neue Bestwerte 🏆</h2><div class="card">${prs.map(p=>`<div class="rev-li"><span>${esc(p.n)}</span><span><b class="up">${fmtW(p.now)} kg</b> <span class="muted sm">vorher ${fmtW(p.before)}</span></span></div>`).join('')}</div>`;
+  // Muskelgruppen
+  const mg={};for(const w of W.w)for(const e of w.entries){const g=exById(e.exId)?.group||'Sonstiges';if(g==='Cardio')continue;mg[g]=(mg[g]||0)+e.sets.length}
+  const mgs=Object.entries(mg).sort((x,y)=>y[1]-x[1]);
+  if(mgs.length){const mx=mgs[0][1];h+=`<h2>Sätze pro Muskelgruppe</h2><div class="card">${mgs.map(([g,n])=>`<div class="mg-row"><span>${esc(g)}</span><div class="bar"><i style="width:${Math.round(n/mx*100)}%"></i></div><b>${n}</b></div>`).join('')}</div>`}
+  // Körpergewicht
+  const bwW=W.w.filter(w=>w.bodyweight!=null).sort((x,y)=>x.date.localeCompare(y.date));
+  if(bwW.length){const last=bwW[bwW.length-1].bodyweight,prev=ws.find(w=>w.date<W.from&&w.bodyweight!=null)?.bodyweight;const d=prev!=null?Math.round((last-prev)*10)/10:null;const cls=d==null?'flat':bwCls(prev?d/prev*100:0);
+    h+=`<h2>Körpergewicht</h2><div class="card between"><div class="rev-k">${fmtW(last)} kg</div><div class="sm ${cls}" style="font-weight:700">${d==null?'':d===0?'unverändert':(d>0?'+':'−')+fmtW(Math.abs(d))+' kg zur Vorwoche'}</div></div>`}
+  // Gruppen
+  if(USER&&sb){loadReviewRanks(W.from,W.to);
+    if(REV.ranks===null)h+=`<h2>Deine Gruppen</h2><div class="card muted sm">Lädt …</div>`;
+    else if(REV.ranks.length)h+=`<h2>Deine Gruppen</h2><div class="card">${REV.ranks.map(g=>`<div class="rev-li"><span><b>${esc(g.name)}</b><br><span class="muted sm">${g.best.is_me?'Du warst am fleißigsten 💪':`Vorne: ${esc(g.best.display_name)} (${g.best.trainings})`}</span></span><span style="text-align:right;font-weight:800;font-size:18px">${g.rank<=3&&W.n>0?['🥇','🥈','🥉'][g.rank-1]+' ':''}${g.rank}.<span class="muted sm" style="font-weight:600"> von ${g.tot}</span></span></div>`).join('')}</div>`}
+  if(!W.n)h+=`<div class="muted sm" style="padding:0 4px 12px">Neue Woche, neues Glück – ab Montag zählt's wieder.</div>`;
+  return h}
+function viewRueckblick(){return`<a href="#statistik" class="back">‹ Statistik</a>`+reviewHTML()}
 
 function viewInfo(){
   const items=[
@@ -650,10 +718,10 @@ function viewMehr(){
 }
 function render(){
   const tab=curTab();
-  const body={training:viewTraining,statistik:viewStatistik,verlauf:viewVerlauf,plaene:viewPlaene,mehr:viewMehr,info:viewInfo,social:viewSocial}[tab]();
-  const title={training:S.active?'Training läuft':'Training',statistik:'Statistik',social:'Social',verlauf:'Verlauf',plaene:'Pläne',mehr:'Mehr',info:'Warum tracken?'}[tab];
+  const body={training:viewTraining,statistik:viewStatistik,verlauf:viewVerlauf,plaene:viewPlaene,mehr:viewMehr,info:viewInfo,social:viewSocial,rueckblick:viewRueckblick}[tab]();
+  const title={training:S.active?'Training läuft':'Training',statistik:'Statistik',social:'Social',verlauf:'Verlauf',plaene:'Pläne',mehr:'Mehr',info:'Warum tracken?',rueckblick:'Wochenrückblick'}[tab];
   document.getElementById('app').innerHTML=`<header><h1>${title}</h1>${syncHTML()}</header>${body}`;
-  document.getElementById('nav').innerHTML=`${TABS.map(([k,l])=>`<a href="#${k}" class="${k===tab||((tab==='info'||tab==='verlauf')&&k==='mehr')?'on':''}">${ICONS[k]}${l}${k==='training'&&S.active&&tab!=='training'?' •':''}</a>`).join('')}`;
+  document.getElementById('nav').innerHTML=`${TABS.map(([k,l])=>`<a href="#${k}" class="${k===tab||((tab==='info'||tab==='verlauf')&&k==='mehr')||(tab==='rueckblick'&&k==='statistik')?'on':''}">${ICONS[k]}${l}${k==='training'&&S.active&&tab!=='training'?' •':''}</a>`).join('')}`;
 }
 // iOS-Homescreen-Bug: Bei durchsichtiger Statusleiste meldet iOS den Bildschirm manchmal zu kurz -> Leiste würde über dem unteren Rand schweben
 function fixGap(){const st=navigator.standalone||matchMedia('(display-mode: standalone)').matches;let g=0;
@@ -674,7 +742,7 @@ function finishWorkout(){
   const entries=a.entries.map(en=>{const c=isCardio(en.exId);return{exId:en.exId,name:exName(en.exId),cardio:c||undefined,sets:c?en.sets.map(s=>({l:num(s.w),t:num(s.r)})).filter(s=>s.t!=null&&s.t>0):en.sets.map(s=>({w:num(s.w),r:num(s.r)})).filter(s=>s.r!=null&&s.r>0)}}).filter(e=>e.sets.length);
   if(!entries.length){toast('Noch keine Sätze eingetragen');return}
   const bwv=num(a.bw);const w={id:a.id,planId:a.planId,planName:plan?plan.name:'Freies Training',date:a.date||today(),startedAt:a.startedAt,finishedAt:Date.now(),durationMin:a.date===today()?Math.max(1,Math.round((Date.now()-a.startedAt)/60000)):null,entries,bodyweight:bwv!=null&&bwv>20&&bwv<400?bwv:null};
-  S.workouts.push(w);S.active=null;SOC.lb={};touchWorkout(w);touchCore();render();toTop();
+  S.workouts.push(w);S.active=null;SOC.lb={};REV.key=null;touchWorkout(w);touchCore();render();toTop();
   toast(`Gespeichert 💪 ${w.durationMin?fmtDur(w.durationMin)+' · ':''}${setCount(w)} ${setCount(w)===1?'Satz':'Sätze'}`);
 }
 function exportJSON(){return JSON.stringify({app:'gym-tracker',version:1,exportedAt:new Date().toISOString(),data:{exercises:S.exercises,plans:S.plans,workouts:S.workouts.filter(w=>!w.deleted),settings:S.settings}},null,1)}

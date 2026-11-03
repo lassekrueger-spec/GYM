@@ -23,7 +23,7 @@ async function send(targets: Target[], tag: string) {
     try {
       await webpush.sendNotification(
         { endpoint: t.endpoint, keys: { p256dh: t.p256dh, auth: t.auth } },
-        JSON.stringify({ title: t.title, body: t.body, tag, url: "#social" }),
+        JSON.stringify({ title: t.title, body: t.body, tag, url: tag === "weekly" ? "#rueckblick" : "#social" }),
         { TTL: 60 * 60 * 12, urgency: "high" },
       );
       sent++;
@@ -64,7 +64,7 @@ Deno.serve(async (req) => {
       if (hour !== 19 && !p.force) return Response.json({ skipped: true, hour });
       const { data, error } = await sb.rpc("push_targets_weekly");
       if (error) throw error;
-      return Response.json(await send(await only(data as Target[]), "weekly"));
+      return Response.json(await send(await only((data as Target[]).map((t) => ({ ...t, body: t.body + "\nTippen für deinen ganzen Rückblick" }))), "weekly"));
     }
     return new Response("bad request", { status: 400 });
   } catch (e) {

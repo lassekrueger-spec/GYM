@@ -24,7 +24,7 @@ async function send(targets: Target[], tag: string) {
       await webpush.sendNotification(
         { endpoint: t.endpoint, keys: { p256dh: t.p256dh, auth: t.auth } },
         JSON.stringify({ title: t.title, body: t.body, tag, url: "#social" }),
-        { TTL: 60 * 60 * 12, urgency: "normal" },
+        { TTL: 60 * 60 * 12, urgency: "high" },
       );
       sent++;
     } catch (e) {
@@ -45,6 +45,11 @@ Deno.serve(async (req) => {
       const { data, error } = await sb.rpc("push_targets_workout", { p_user: p.user_id });
       if (error) throw error;
       return Response.json(await send(data as Target[], "workout-" + p.user_id));
+    }
+    if (p.type === "test" && p.user_id) {
+      const { data, error } = await sb.from("push_subscriptions").select("endpoint,p256dh,auth").eq("user_id", p.user_id);
+      if (error) throw error;
+      return Response.json(await send((data ?? []).map((r) => ({ ...r, title: "Test 🔔", body: "Wenn du das liest, funktionieren die Mitteilungen." })), "test"));
     }
     if (p.type === "weekly") {
       // Cron läuft 17 und 18 Uhr UTC – nur senden, wenn es in Deutschland 19 Uhr ist (Sommer-/Winterzeit)

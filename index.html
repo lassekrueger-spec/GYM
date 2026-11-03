@@ -61,6 +61,15 @@ textarea{min-height:90px;font-size:13px;font-family:ui-monospace,Menlo,monospace
 .grid{display:grid;grid-template-columns:26px 1fr 1fr 50px;gap:8px;align-items:center}
 .set-head{font-size:11px;color:var(--mute);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
 .set{margin-bottom:8px}
+.grid.uni{grid-template-columns:22px 16px 1fr 1fr 50px;row-gap:6px}
+.grid.uni>.n{grid-column:1;grid-row:1/3;align-self:center}
+.grid.uni>.chk{grid-column:5;grid-row:1/3;height:auto;align-self:stretch}
+.grid.uni>.side.l{grid-column:2;grid-row:1}.grid.uni>.side.r{grid-column:2;grid-row:2}
+.grid.uni>[data-act=w]{grid-column:3;grid-row:1}.grid.uni>[data-act=r]{grid-column:4;grid-row:1}
+.grid.uni>[data-act=w2]{grid-column:3;grid-row:2}.grid.uni>[data-act=r2]{grid-column:4;grid-row:2}
+.grid.uni .side{font-size:12px;font-weight:800;color:var(--mute);text-align:center}
+.set.uni-set{padding-bottom:10px;border-bottom:1px solid var(--line);margin-bottom:10px}
+button.on-uni{background:var(--acc);color:var(--accInk)}
 .set .n{color:var(--mute);font-weight:700;text-align:center}
 .set input{text-align:center;height:44px;font-weight:600}
 .set .chk{height:44px;padding:0;border-radius:10px;font-size:19px;color:var(--mute)}
@@ -172,7 +181,9 @@ const fmtInt=n=>Math.round(n).toLocaleString('de-DE');
 const fmtDate=s=>parseD(s).toLocaleDateString('de-DE',{weekday:'short',day:'numeric',month:'short'});
 function daysAgo(s){const d=Math.round((parseD(today())-parseD(s))/864e5);return d<=0?'heute':d===1?'gestern':`vor ${d} Tagen`}
 function weekStart(d){const x=new Date(d.getFullYear(),d.getMonth(),d.getDate());x.setDate(x.getDate()-((x.getDay()+6)%7));return x}
-const setStr=s=>s.t!=null?`${s.l!=null?'Stufe '+fmtW(s.l)+' · ':''}${fmtW(s.t)} Min.`:s.w!=null?`${fmtW(s.w)}×${s.r}`:`${s.r} Wdh.`;
+const sidePart=(w,r)=>w!=null?`${fmtW(w)}×${r??'–'}`:`${r??'–'} Wdh.`;
+const isUniSet=s=>s.w2!=null||s.r2!=null;
+const setStr=s=>isUniSet(s)?`L ${sidePart(s.w,s.r)} / R ${sidePart(s.w2,s.r2)}`:s.t!=null?`${s.l!=null?'Stufe '+fmtW(s.l)+' · ':''}${fmtW(s.t)} Min.`:s.w!=null?`${fmtW(s.w)}×${s.r}`:`${s.r} Wdh.`;
 const fmtDur=m=>m==null?'':m>=60?`${Math.floor(m/60)} Std. ${m%60} Min.`:`${m} Min.`;
 
 /* ---------- State ---------- */
@@ -196,10 +207,10 @@ const planById=id=>S.plans.find(p=>p.id===id);
 const exName=(id,fb)=>exById(id)?.name||fb||'Gelöschte Übung';
 function workoutsSorted(){return S.workouts.filter(w=>!w.deleted).sort((a,b)=>b.date.localeCompare(a.date)||(b.finishedAt||0)-(a.finishedAt||0))}
 const isCardio=exId=>exById(exId)?.group==='Cardio';
-const defaultSets=exId=>{const l=lastFor(exId);return Array.from({length:l?l.sets.length:(isCardio(exId)?1:3)},()=>({w:'',r:'',done:false}))};
+const defaultSets=exId=>{const l=lastFor(exId);return Array.from({length:l?l.sets.length:(isCardio(exId)?1:3)},()=>({w:'',r:'',w2:'',r2:'',done:false}))};
 function lastFor(exId){for(const w of workoutsSorted()){const e=w.entries.find(e=>e.exId===exId);if(e&&e.sets.length)return{date:w.date,sets:e.sets}}return null}
-function bestFor(exId){let m=null;for(const w of S.workouts){if(w.deleted)continue;for(const e of w.entries)if(e.exId===exId)for(const s of e.sets)if(s.w!=null&&(m==null||s.w>m))m=s.w}return m}
-const volume=w=>w.entries.reduce((a,e)=>a+e.sets.reduce((b,s)=>b+(s.w||0)*(s.r||0),0),0);
+function bestFor(exId){let m=null;for(const w of S.workouts){if(w.deleted)continue;for(const e of w.entries)if(e.exId===exId)for(const s of e.sets)for(const v of[s.w,s.w2])if(v!=null&&(m==null||v>m))m=v}return m}
+const volume=w=>w.entries.reduce((a,e)=>a+e.sets.reduce((b,s)=>b+(s.w||0)*(s.r||0)+(s.w2||0)*(s.r2||0),0),0);
 const cardioMin=w=>w.entries.reduce((a,e)=>a+e.sets.reduce((b,s)=>b+(s.t||0),0),0);
 const setCount=w=>w.entries.reduce((a,e)=>a+e.sets.length,0);
 
@@ -331,10 +342,10 @@ function exSeries(exId){
   const ws=workoutsSorted().slice().reverse();
   const cardio=ws.some(w=>w.entries.some(e=>e.exId===exId&&e.sets.some(s=>s.t!=null)));
   if(cardio){const points=[];for(const w of ws){const e=w.entries.find(e=>e.exId===exId);if(!e)continue;let l=null,t=0;for(const s of e.sets){if(s.l!=null&&(l==null||s.l>l))l=s.l;t+=s.t||0}if(l!=null||t)points.push({date:w.date,v:l??0,t})}return{cardio:true,weighted:false,points}}
-  const weighted=ws.some(w=>w.entries.some(e=>e.exId===exId&&e.sets.some(s=>s.w!=null&&s.w>0)));
+  const weighted=ws.some(w=>w.entries.some(e=>e.exId===exId&&e.sets.some(s=>(s.w!=null&&s.w>0)||(s.w2!=null&&s.w2>0))));
   const points=[];
   for(const w of ws){const e=w.entries.find(e=>e.exId===exId);if(!e)continue;let v=null;
-    for(const s of e.sets){const x=weighted?e1rm(s):s.r;if(x!=null&&(v==null||x>v))v=x}
+    for(const s of e.sets)for(const x of weighted?[e1rm(s),e1rm({w:s.w2,r:s.r2})]:[s.r,s.r2])if(x!=null&&(v==null||x>v))v=x
     if(v!=null)points.push({date:w.date,v})}
   return{weighted,points};
 }
@@ -462,7 +473,7 @@ function reviewHTML(){
   // Neue Bestwerte
   const prs=[];const seenEx=new Set();
   for(const w of W.w)for(const e of w.entries){if(e.cardio||seenEx.has(e.exId))continue;seenEx.add(e.exId);
-    let now=null,before=null;for(const x of ws)for(const f of x.entries)if(f.exId===e.exId)for(const st of f.sets){if(st.w==null)continue;if(x.date>=W.from&&x.date<=W.to){if(now==null||st.w>now)now=st.w}else if(x.date<W.from&&(before==null||st.w>before))before=st.w}
+    let now=null,before=null;for(const x of ws)for(const f of x.entries)if(f.exId===e.exId)for(const st of f.sets)for(const v of[st.w,st.w2]){if(v==null)continue;if(x.date>=W.from&&x.date<=W.to){if(now==null||v>now)now=v}else if(x.date<W.from&&(before==null||v>before))before=v}
     if(now!=null&&before!=null&&now>before)prs.push({n:exName(e.exId,e.name),now,before})}
   if(prs.length)h+=`<h2>Neue Bestwerte 🏆</h2><div class="card">${prs.map(p=>`<div class="rev-li"><span>${esc(p.n)}</span><span><b class="up">${fmtW(p.now)} kg</b> <span class="muted sm">vorher ${fmtW(p.before)}</span></span></div>`).join('')}</div>`;
   // Muskelgruppen
@@ -651,7 +662,11 @@ function placeholders(en){
     const lw=l?(c?l.l:l.w):null,lr=l?(c?l.t:l.r):null;
     const w=lw!=null?fmtW(lw):prevS&&prevS.w!==''?prevS.w:prev?prev.w:'';
     const r=lr!=null?fmtW(lr):prevS&&prevS.r!==''?prevS.r:prev?prev.r:'';
-    out.push({w,r})});
+    // Einarmig: rechte Seite – letzter Wert rechts, sonst wie links
+    const lw2=l?(l.w2??l.w):null,lr2=l?(l.r2??l.r):null;
+    const w2=lw2!=null?fmtW(lw2):prevS&&prevS.w2?prevS.w2:prev?prev.w2:w;
+    const r2=lr2!=null?fmtW(lr2):prevS&&prevS.r2?prevS.r2:prev?prev.r2:r;
+    out.push({w,r,w2,r2})});
   return out;
 }
 function viewActive(){
@@ -661,11 +676,16 @@ function viewActive(){
     const c=isCardio(en.exId),last=lastFor(en.exId),best=c?null:bestFor(en.exId),ph=placeholders(en);
     h+=`<div class="card"><div class="between"><div class="ex-title">${esc(exName(en.exId))}</div>${best!=null?`<span class="muted sm">Bestwert ${fmtW(best)} kg</span>`:''}</div>`;
     h+=`<div class="last">${last?`Letztes Mal (${daysAgo(last.date)}): <b>${last.sets.map(setStr).join(' · ')}</b>`:'Erstes Mal – leg einfach los'}</div>`;
-    h+=`<div class="grid set-head"><span style="text-align:center">#</span><span style="text-align:center">${c?'Stufe':'kg'}</span><span style="text-align:center">${c?'Minuten':'Wdh.'}</span><span></span></div>`;
+    const uni=!c&&en.uni;
+    h+=uni?`<div class="grid uni set-head"><span style="text-align:center">#</span><span></span><span style="text-align:center">kg</span><span style="text-align:center">Wdh.</span><span></span></div>`
+      :`<div class="grid set-head"><span style="text-align:center">#</span><span style="text-align:center">${c?'Stufe':'kg'}</span><span style="text-align:center">${c?'Minuten':'Wdh.'}</span><span></span></div>`;
     en.sets.forEach((s,j)=>{
-      const isPr=s.done&&best!=null&&num(s.w)!=null&&num(s.w)>best;
+      const mx=Math.max(num(s.w)??-1,uni?num(s.w2)??-1:-1);
+      const isPr=s.done&&best!=null&&mx>best;
+      if(uni){const inp=(k,v,p,m)=>`<input inputmode="${m}" ${m==='numeric'?'pattern="[0-9]*"':''} data-act="${k}" data-i="${i}" data-j="${j}" value="${esc(v??'')}" placeholder="${esc(p??'')}">`;
+        h+=`<div class="grid uni set uni-set ${s.done?'done':''}"><span class="n">${j+1}</span><span class="side l">L</span>${inp('w',s.w,ph[j].w,'decimal')}${inp('r',s.r,ph[j].r,'numeric')}<button class="chk" data-act="check" data-i="${i}" data-j="${j}">✓</button><span class="side r">R</span>${inp('w2',s.w2,ph[j].w2,'decimal')}${inp('r2',s.r2,ph[j].r2,'numeric')}</div>${isPr?`<div class="pr">🏆 Neuer Bestwert!</div>`:''}`;return}
       h+=`<div class="grid set ${s.done?'done':''}"><span class="n">${j+1}</span><input inputmode="decimal" data-act="w" data-i="${i}" data-j="${j}" value="${esc(s.w)}" placeholder="${esc(ph[j].w)}"><input inputmode="${c?'decimal':'numeric'}" ${c?'':'pattern="[0-9]*"'} data-act="r" data-i="${i}" data-j="${j}" value="${esc(s.r)}" placeholder="${esc(ph[j].r)}"><button class="chk" data-act="check" data-i="${i}" data-j="${j}">✓</button></div>${isPr?`<div class="pr">🏆 Neuer Bestwert!</div>`:''}`});
-    h+=`<div class="actions"><button class="sm" data-act="addset" data-i="${i}">+ ${c?'Runde':'Satz'}</button>${en.sets.length?`<button class="sm" data-act="delset" data-i="${i}">– ${c?'Runde':'Satz'}</button>`:''}<span class="grow"></span><button class="ghost sm" data-act="up" data-i="${i}">↑</button><button class="ghost sm" data-act="down" data-i="${i}">↓</button><button class="ghost sm danger" data-act="rmex" data-i="${i}" data-confirm="1">Entfernen</button></div></div>`;
+    h+=`<div class="actions"><button class="sm" data-act="addset" data-i="${i}">+ ${c?'Runde':'Satz'}</button>${en.sets.length?`<button class="sm" data-act="delset" data-i="${i}">– ${c?'Runde':'Satz'}</button>`:''}${c?'':`<button class="sm ${uni?'on-uni':''}" data-act="uni" data-i="${i}">Einarmig</button>`}<span class="grow"></span><button class="ghost sm" data-act="up" data-i="${i}">↑</button><button class="ghost sm" data-act="down" data-i="${i}">↓</button><button class="ghost sm danger" data-act="rmex" data-i="${i}" data-confirm="1">Entfernen</button></div></div>`;
   });
   const used=new Set(a.entries.map(e=>e.exId));
   h+=`<div class="card"><select data-act="addex"><option value="">+ Übung hinzufügen…</option>${exOptions(used)}</select></div>`;
@@ -737,12 +757,12 @@ window.addEventListener('hashchange',()=>{if(curTab()==='social'&&USER&&SOC.grou
 /* ---------- Actions ---------- */
 function startWorkout(planId){
   const p=planById(planId);
-  const entries=(p?p.exerciseIds:[]).filter(exById).map(exId=>({exId,sets:defaultSets(exId)}));
+  const entries=(p?p.exerciseIds:[]).filter(exById).map(exId=>({exId,uni:!!exById(exId)?.uni||undefined,sets:defaultSets(exId)}));
   S.active={id:uid(),planId:p?p.id:null,date:today(),startedAt:Date.now(),entries};touchCore();render();toTop();
 }
 function finishWorkout(){
   const a=S.active,plan=planById(a.planId);
-  const entries=a.entries.map(en=>{const c=isCardio(en.exId);return{exId:en.exId,name:exName(en.exId),cardio:c||undefined,sets:c?en.sets.map(s=>({l:num(s.w),t:num(s.r)})).filter(s=>s.t!=null&&s.t>0):en.sets.map(s=>({w:num(s.w),r:num(s.r)})).filter(s=>s.r!=null&&s.r>0)}}).filter(e=>e.sets.length);
+  const entries=a.entries.map(en=>{const c=isCardio(en.exId);return{exId:en.exId,name:exName(en.exId),cardio:c||undefined,uni:(!c&&en.uni)||undefined,sets:c?en.sets.map(s=>({l:num(s.w),t:num(s.r)})).filter(s=>s.t!=null&&s.t>0):en.uni?en.sets.map(s=>({w:num(s.w),r:num(s.r),w2:num(s.w2),r2:num(s.r2)})).filter(s=>(s.r!=null&&s.r>0)||(s.r2!=null&&s.r2>0)):en.sets.map(s=>({w:num(s.w),r:num(s.r)})).filter(s=>s.r!=null&&s.r>0)}}).filter(e=>e.sets.length);
   if(!entries.length){toast('Noch keine Sätze eingetragen');return}
   const bwv=num(a.bw);const w={id:a.id,planId:a.planId,planName:plan?plan.name:'Freies Training',date:a.date||today(),startedAt:a.startedAt,finishedAt:Date.now(),durationMin:a.date===today()?Math.max(1,Math.round((Date.now()-a.startedAt)/60000)):null,entries,bodyweight:bwv!=null&&bwv>20&&bwv<400?bwv:null};
   S.workouts.push(w);S.active=null;SOC.lb={};REV.key=null;touchWorkout(w);touchCore();render();toTop();
@@ -772,10 +792,13 @@ document.addEventListener('click',async ev=>{
     case'start':startWorkout(id);break;
     case'cancel':S.active=null;touchCore();render();toast('Training verworfen');break;
     case'finish':finishWorkout();break;
+    case'uni':{const en=a.entries[i];en.uni=!en.uni||undefined;en.sets.forEach(s=>{if(s.w2==null)s.w2='';if(s.r2==null)s.r2=''});const ex=exById(en.exId);if(ex){ex.uni=en.uni}touchCore();render();toast(en.uni?'Einarmig: links und rechts getrennt – merkt sich die App':'Wieder beidarmig');break}
     case'check':{const en=a.entries[i],s=en.sets[j];
-      if(!s.done){const ph=placeholders(en)[j];if(s.w==='')s.w=ph.w;if(s.r==='')s.r=ph.r;if(s.r===''){toast(isCardio(en.exId)?'Erst Minuten eintragen':'Erst Wiederholungen eintragen');return}}
+      if(!s.done){const ph=placeholders(en)[j];if(s.w==='')s.w=ph.w;if(s.r==='')s.r=ph.r;
+        if(en.uni&&!isCardio(en.exId)){if(!s.w2)s.w2=ph.w2;if(!s.r2)s.r2=ph.r2;if(s.r===''||!s.r2){toast('Erst Wiederholungen für links und rechts eintragen');return}}
+        if(s.r===''){toast(isCardio(en.exId)?'Erst Minuten eintragen':'Erst Wiederholungen eintragen');return}}
       s.done=!s.done;touchCore();render();break}
-    case'addset':{const en=a.entries[i],l=en.sets[en.sets.length-1];en.sets.push({w:l?l.w:'',r:'',done:false});touchCore();render();break}
+    case'addset':{const en=a.entries[i],l=en.sets[en.sets.length-1];en.sets.push({w:l?l.w:'',r:'',w2:l?l.w2||'':'',r2:'',done:false});touchCore();render();break}
     case'delset':a.entries[i].sets.pop();touchCore();render();break;
     case'rmex':a.entries.splice(i,1);touchCore();render();break;
     case'up':if(move(a.entries,i,-1)){touchCore();render()}break;
@@ -821,7 +844,7 @@ document.addEventListener('click',async ev=>{
 });
 document.addEventListener('input',ev=>{
   const el=ev.target,act=el.dataset.act;
-  if(act==='w'||act==='r'){S.active.entries[+el.dataset.i].sets[+el.dataset.j][act]=el.value;touchCore()}
+  if(act==='w'||act==='r'||act==='w2'||act==='r2'){S.active.entries[+el.dataset.i].sets[+el.dataset.j][act]=el.value;touchCore()}
   if(act==='bw'){S.active.bw=el.value;touchCore()}
   if(act==='bwtarget'){S.settings.bwTarget=num(el.value);touchCore()}
 });
@@ -833,7 +856,7 @@ document.addEventListener('change',ev=>{
     case'bwtarget':render();break;
     case'dur':{const w=S.workouts.find(w=>w.id===id),v=num(el.value);if(w){w.durationMin=v!=null&&v>0?Math.round(v):null;touchWorkout(w)}break}
     case'adate':if(el.value){S.active.date=el.value;touchCore()}break;
-    case'addex':if(el.value){S.active.entries.push({exId:el.value,sets:defaultSets(el.value)});touchCore();render()}break;
+    case'addex':if(el.value){S.active.entries.push({exId:el.value,uni:!!exById(el.value)?.uni||undefined,sets:defaultSets(el.value)});touchCore();render()}break;
     case'padd':if(el.value){planById(id).exerciseIds.push(el.value);touchCore();render()}break;
     case'pname':{const v=el.value.trim();if(v){planById(id).name=v;touchCore()}else el.value=planById(id).name;break}
     case'exname':{const v=el.value.trim(),e=exById(id);if(v){e.name=v;touchCore()}else el.value=e.name;break}

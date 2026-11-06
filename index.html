@@ -120,6 +120,10 @@ details summary::-webkit-details-marker{display:none}
 .stepper b{font-size:24px;min-width:24px;text-align:center}
 .timer{font-size:34px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.01em;color:var(--acc);margin:2px 0 4px}
 .date-in{width:auto;padding:6px 8px;font-size:15px;background:transparent;border-color:var(--line)}
+.bf-grid{display:grid;grid-template-columns:1.25fr 1fr 1fr;gap:8px}
+.bf-grid label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--mute);font-weight:600;min-width:0}
+.bf-grid input{padding:8px 6px;font-size:15px;text-align:center;min-width:0}
+.bf-grid .row{gap:4px}
 .bw-in{display:flex;align-items:center;gap:8px;margin-top:10px}
 .bw-in input{width:92px;text-align:center;font-weight:600;padding:7px 8px}
 .chips{display:flex;gap:6px;margin-bottom:12px}
@@ -655,6 +659,10 @@ function viewTraining(){
   for(const p of S.plans){const d=lastDate(p);
     h+=`<button class="plan-btn" data-act="start" data-id="${p.id}"><div><div class="name">${esc(p.name)}${sugg&&sugg.p===p&&S.plans.length>1?'<span class="badge">Als Nächstes</span>':''}</div><div class="meta">${p.exerciseIds.length} Übungen · ${d?'zuletzt '+daysAgo(d):'noch nie'}</div></div><span class="go">›</span></button>`}
   h+=`<button class="ghost block" data-act="start" data-id="">+ Freies Training ohne Plan</button>`;
+  if(!BACKFILL)h+=`<button class="ghost block sm" data-act="backfill-open" style="margin-top:4px">🕓 Training vergessen? Nachtragen</button>`;
+  else{h+=`<h2>Training nachtragen</h2><div class="muted sm" style="padding:0 4px 10px">Welchen Plan hast du gemacht? Datum, Uhrzeit und Dauer stellst du gleich danach ein.</div>`;
+    for(const p of S.plans)h+=`<button class="plan-btn" data-act="start" data-id="${p.id}" data-back="1"><div><div class="name">${esc(p.name)}</div><div class="meta">nachtragen</div></div><span class="go">›</span></button>`;
+    h+=`<div class="row"><button class="ghost grow" data-act="start" data-id="" data-back="1">Ohne Plan nachtragen</button><button class="ghost" data-act="backfill-open">Abbrechen</button></div>`}
   return h;
 }
 function placeholders(en){
@@ -673,7 +681,8 @@ function placeholders(en){
 }
 function viewActive(){
   const a=S.active,plan=planById(a.planId);
-  let h=`<div class="card"><div class="between"><div><div class="ex-title" style="font-size:22px">${esc(plan?plan.name:'Freies Training')}</div><div class="timer" id="timer">${fmtTimer()}</div><input type="date" class="date-in" data-act="adate" value="${esc(a.date)}" style="margin-top:6px"><label class="bw-in muted sm">Körpergewicht<input inputmode="decimal" data-act="bw" value="${esc(a.bw||'')}" placeholder="${lastBW()!=null?fmtW(lastBW()):'kg'}">kg</label></div><button class="ghost danger sm" data-act="cancel" data-confirm="1">Verwerfen</button></div></div>`;
+  let h=a.backfill?`<div class="card"><div class="between"><div class="ex-title" style="font-size:22px">${esc(plan?plan.name:'Freies Training')} <span class="badge">🕓 Nachtrag</span></div><button class="ghost danger sm" data-act="cancel" data-confirm="1">Verwerfen</button></div><div class="bf-grid" style="margin-top:10px"><label>Datum<input type="date" data-act="adate" max="${today()}" value="${esc(a.date)}"></label><label>Start<input type="time" data-act="atime" value="${esc(a.time||'18:00')}"></label><label>Dauer<span class="row"><input inputmode="numeric" pattern="[0-9]*" data-act="adur" value="${esc(a.dur||'')}" placeholder="–">Min.</span></label></div><label class="bw-in muted sm">Körpergewicht<input inputmode="decimal" data-act="bw" value="${esc(a.bw||'')}" placeholder="${lastBW()!=null?fmtW(lastBW()):'kg'}">kg</label></div>`
+  :`<div class="card"><div class="between"><div><div class="ex-title" style="font-size:22px">${esc(plan?plan.name:'Freies Training')}</div><div class="timer" id="timer">${fmtTimer()}</div><input type="date" class="date-in" data-act="adate" value="${esc(a.date)}" style="margin-top:6px"><label class="bw-in muted sm">Körpergewicht<input inputmode="decimal" data-act="bw" value="${esc(a.bw||'')}" placeholder="${lastBW()!=null?fmtW(lastBW()):'kg'}">kg</label></div><button class="ghost danger sm" data-act="cancel" data-confirm="1">Verwerfen</button></div></div>`;
   a.entries.forEach((en,i)=>{
     const c=isCardio(en.exId),last=lastFor(en.exId),best=c?null:bestFor(en.exId),ph=placeholders(en);
     h+=`<div class="card"><div class="between"><div class="ex-title">${esc(exName(en.exId))}</div>${best!=null?`<span class="muted sm">Bestwert ${fmtW(best)} kg</span>`:''}</div>`;
@@ -691,7 +700,7 @@ function viewActive(){
   });
   const used=new Set(a.entries.map(e=>e.exId));
   h+=`<div class="card"><select data-act="addex"><option value="">+ Übung hinzufügen…</option>${exOptions(used)}</select></div>`;
-  h+=`<button class="primary block" data-act="finish">Training beenden & speichern</button>`;
+  h+=`<button class="primary block" data-act="finish">${a.backfill?'Nachtrag speichern':'Training beenden & speichern'}</button>`;
   return h;
 }
 function exOptions(exclude){
@@ -702,9 +711,10 @@ function viewVerlauf(){return`<a href="#mehr" class="back">‹ Zurück</a>`+view
 function viewVerlaufList(){
   const ws=workoutsSorted();
   if(!ws.length)return`<div class="empty">Noch keine Trainings gespeichert.<br>Starte dein erstes unter „Training“.</div>`;
-  return ws.map(w=>`<details class="card"><summary><div class="between"><div><div class="ex-title">${esc(w.planName||'Training')}</div><div class="muted sm">${fmtDate(w.date)}${w.durationMin?` · ${fmtDur(w.durationMin)}`:''}${w.bodyweight!=null?` · ${fmtW(w.bodyweight)} kg KG`:''} · ${w.entries.length} ${w.entries.length===1?'Übung':'Übungen'} · ${setCount(w)} ${setCount(w)===1?'Satz':'Sätze'}</div></div><div style="text-align:right">${volume(w)>0||!cardioMin(w)?`<div style="font-weight:700">${fmtInt(volume(w))} kg</div><div class="muted sm">Volumen</div>`:`<div style="font-weight:700">${fmtW(cardioMin(w))} Min.</div><div class="muted sm">Cardio</div>`}</div></div></summary>
+  return ws.map(w=>`<details class="card"><summary><div class="between"><div><div class="ex-title">${esc(w.planName||'Training')}</div><div class="muted sm">${fmtDate(w.date)}${w.startedAt?` · ${hhmm(w.startedAt)} Uhr`:''}${w.backfilled?' · nachgetragen':''}${w.durationMin?` · ${fmtDur(w.durationMin)}`:''}${w.bodyweight!=null?` · ${fmtW(w.bodyweight)} kg KG`:''} · ${w.entries.length} ${w.entries.length===1?'Übung':'Übungen'} · ${setCount(w)} ${setCount(w)===1?'Satz':'Sätze'}</div></div><div style="text-align:right">${volume(w)>0||!cardioMin(w)?`<div style="font-weight:700">${fmtInt(volume(w))} kg</div><div class="muted sm">Volumen</div>`:`<div style="font-weight:700">${fmtW(cardioMin(w))} Min.</div><div class="muted sm">Cardio</div>`}</div></div></summary>
   <div class="hist-sets">${w.entries.map(e=>`<div><span>${esc(exName(e.exId,e.name))}</span><span>${e.sets.map(setStr).join(', ')}</span></div>`).join('')}</div>
-  <div class="actions"><label class="row muted sm">Dauer<input inputmode="numeric" data-act="dur" data-id="${w.id}" value="${w.durationMin??''}" placeholder="–" style="width:70px;text-align:center;padding:6px">Min.</label><span class="grow"></span><button class="ghost sm danger" data-act="delw" data-id="${w.id}" data-confirm="1">Training löschen</button></div></details>`).join('');
+  <div class="bf-grid" style="margin-top:10px"><label>Datum<input type="date" data-act="wdate" data-id="${w.id}" max="${today()}" value="${esc(w.date)}"></label><label>Start<input type="time" data-act="wtime" data-id="${w.id}" value="${w.startedAt?hhmm(w.startedAt):''}"></label><label>Dauer<span class="row"><input inputmode="numeric" pattern="[0-9]*" data-act="dur" data-id="${w.id}" value="${w.durationMin??''}" placeholder="–">Min.</span></label></div>
+  <div class="actions" style="margin-top:8px"><span class="grow"></span><button class="ghost sm danger" data-act="delw" data-id="${w.id}" data-confirm="1">Training löschen</button></div></details>`).join('');
 }
 function viewPlaene(){
   let h=`<h2>Trainingspläne</h2>`;
@@ -745,7 +755,7 @@ function viewMehr(){
 function render(){
   const tab=curTab();
   const body={training:viewTraining,statistik:viewStatistik,verlauf:viewVerlauf,plaene:viewPlaene,mehr:viewMehr,info:viewInfo,social:viewSocial,rueckblick:viewRueckblick}[tab]();
-  const title={training:S.active?'Training läuft':'Training',statistik:'Statistik',social:'Social',verlauf:'Verlauf',plaene:'Pläne',mehr:'Mehr',info:'Warum tracken?',rueckblick:'Wochenrückblick'}[tab];
+  const title={training:S.active?(S.active.backfill?'Nachtragen':'Training läuft'):'Training',statistik:'Statistik',social:'Social',verlauf:'Verlauf',plaene:'Pläne',mehr:'Mehr',info:'Warum tracken?',rueckblick:'Wochenrückblick'}[tab];
   document.getElementById('app').innerHTML=`<header><h1>${title}</h1>${syncHTML()}</header>${body}`;
   document.getElementById('nav').innerHTML=`${TABS.map(([k,l])=>`<a href="#${k}" class="${k===tab||((tab==='info'||tab==='verlauf')&&k==='mehr')||(tab==='rueckblick'&&k==='statistik')?'on':''}">${ICONS[k]}${l}${k==='training'&&S.active&&tab!=='training'?' •':''}</a>`).join('')}`;
 }
@@ -758,18 +768,28 @@ function toTop(smooth){const sc=document.getElementById('scroller');sc&&sc.scrol
 window.addEventListener('hashchange',()=>{if(curTab()==='social'&&USER&&SOC.groups)setTimeout(()=>loadLB(),0);exportText=null;render();toTop()});
 
 /* ---------- Actions ---------- */
-function startWorkout(planId){
+const hhmm=t=>{const d=new Date(t);return pad(d.getHours())+':'+pad(d.getMinutes())};
+const atTime=(date,time)=>{const d=parseD(date);const[h,m]=String(time||'18:00').split(':').map(Number);d.setHours(h||0,m||0,0,0);return d.getTime()};
+const yesterday=()=>{const d=new Date();d.setDate(d.getDate()-1);return ymd(d)};
+let BACKFILL=false;
+function startWorkout(planId,backfill){
   const p=planById(planId);
   const entries=(p?p.exerciseIds:[]).filter(exById).map(exId=>({exId,uni:!!exById(exId)?.uni||undefined,sets:defaultSets(exId)}));
-  S.active={id:uid(),planId:p?p.id:null,date:today(),startedAt:Date.now(),entries};touchCore();render();toTop();
+  S.active={id:uid(),planId:p?p.id:null,date:backfill?yesterday():today(),startedAt:Date.now(),entries};
+  if(backfill){S.active.backfill=true;S.active.time='18:00';S.active.dur='60'}
+  BACKFILL=false;touchCore();render();toTop();
 }
 function finishWorkout(){
   const a=S.active,plan=planById(a.planId);
   const entries=a.entries.map(en=>{const c=isCardio(en.exId);return{exId:en.exId,name:exName(en.exId),cardio:c||undefined,uni:(!c&&en.uni)||undefined,sets:c?en.sets.map(s=>({l:num(s.w),t:num(s.r)})).filter(s=>s.t!=null&&s.t>0):en.uni?en.sets.map(s=>({w:num(s.w),r:num(s.r),w2:num(s.w2),r2:num(s.r2)})).filter(s=>(s.r!=null&&s.r>0)||(s.r2!=null&&s.r2>0)):en.sets.map(s=>({w:num(s.w),r:num(s.r)})).filter(s=>s.r!=null&&s.r>0)}}).filter(e=>e.sets.length);
   if(!entries.length){toast('Noch keine Sätze eingetragen');return}
-  const bwv=num(a.bw);const w={id:a.id,planId:a.planId,planName:plan?plan.name:'Freies Training',date:a.date||today(),startedAt:a.startedAt,finishedAt:Date.now(),durationMin:a.date===today()?Math.max(1,Math.round((Date.now()-a.startedAt)/60000)):null,entries,bodyweight:bwv!=null&&bwv>20&&bwv<400?bwv:null};
+  const bwv=num(a.bw);let startedAt=a.startedAt,finishedAt=Date.now(),durationMin=a.date===today()?Math.max(1,Math.round((Date.now()-a.startedAt)/60000)):null;
+  if(a.backfill){const dm=num(a.dur);startedAt=atTime(a.date,a.time);durationMin=dm!=null&&dm>0?Math.round(dm):null;finishedAt=startedAt+(durationMin||0)*60000;
+    if(startedAt>Date.now()){toast('Das Training liegt in der Zukunft – Datum oder Uhrzeit prüfen');return}}
+  const w={id:a.id,planId:a.planId,planName:plan?plan.name:'Freies Training',date:a.date||today(),startedAt,finishedAt,durationMin,entries,bodyweight:bwv!=null&&bwv>20&&bwv<400?bwv:null};
+  if(a.backfill)w.backfilled=true;
   S.workouts.push(w);S.active=null;SOC.lb={};REV.key=null;touchWorkout(w);touchCore();render();toTop();
-  toast(`Gespeichert 💪 ${w.durationMin?fmtDur(w.durationMin)+' · ':''}${setCount(w)} ${setCount(w)===1?'Satz':'Sätze'}`);
+  toast(`${w.backfilled?'Nachgetragen ✓ ':'Gespeichert 💪 '}${w.durationMin?fmtDur(w.durationMin)+' · ':''}${setCount(w)} ${setCount(w)===1?'Satz':'Sätze'}`);
 }
 function exportJSON(){return JSON.stringify({app:'gym-tracker',version:1,exportedAt:new Date().toISOString(),data:{exercises:S.exercises,plans:S.plans,workouts:S.workouts.filter(w=>!w.deleted),settings:S.settings}},null,1)}
 async function doImport(){
@@ -792,7 +812,8 @@ document.addEventListener('click',async ev=>{
   if(b.dataset.confirm&&!b.dataset.armed){const t=b.textContent;b.dataset.armed='1';b.dataset.orig=t;b.textContent=t.length<3?'?':'Sicher?';setTimeout(()=>{if(b.isConnected){delete b.dataset.armed;b.textContent=b.dataset.orig}},3000);return}
   const act=b.dataset.act,i=+b.dataset.i,j=+b.dataset.j,id=b.dataset.id,a=S.active;
   switch(act){
-    case'start':startWorkout(id);break;
+    case'start':startWorkout(id,!!b.dataset.back);break;
+    case'backfill-open':BACKFILL=!BACKFILL;render();if(BACKFILL)setTimeout(()=>{const sc=document.getElementById('scroller');sc&&sc.scrollTo({top:sc.scrollHeight,behavior:'smooth'})},50);break;
     case'cancel':S.active=null;touchCore();render();toast('Training verworfen');break;
     case'finish':finishWorkout();break;
     case'exuni':{const ex=exById(id);if(ex){ex.uni=!ex.uni||undefined;if(S.active)S.active.entries.forEach(en=>{if(en.exId===id){en.uni=ex.uni;en.sets.forEach(s=>{if(s.w2==null)s.w2='';if(s.r2==null)s.r2=''})}});touchCore();render();toast(ex.uni?`„${ex.name}“ ist jetzt einarmig`:`„${ex.name}“ wieder beidarmig`)}break}
@@ -850,6 +871,7 @@ document.addEventListener('input',ev=>{
   const el=ev.target,act=el.dataset.act;
   if(act==='w'||act==='r'||act==='w2'||act==='r2'){S.active.entries[+el.dataset.i].sets[+el.dataset.j][act]=el.value;touchCore()}
   if(act==='bw'){S.active.bw=el.value;touchCore()}
+  if(act==='adur'){S.active.dur=el.value;touchCore()}
   if(act==='bwtarget'){S.settings.bwTarget=num(el.value);touchCore()}
 });
 document.addEventListener('change',ev=>{
@@ -858,8 +880,12 @@ document.addEventListener('change',ev=>{
     case'statex':statEx=el.value;render();break;
     case'showbw':S.settings.showBW=el.checked;save();render();break;
     case'bwtarget':render();break;
-    case'dur':{const w=S.workouts.find(w=>w.id===id),v=num(el.value);if(w){w.durationMin=v!=null&&v>0?Math.round(v):null;touchWorkout(w)}break}
-    case'adate':if(el.value){S.active.date=el.value;touchCore()}break;
+    case'dur':{const w=S.workouts.find(w=>w.id===id),v=num(el.value);if(w){w.durationMin=v!=null&&v>0?Math.round(v):null;if(w.startedAt)w.finishedAt=w.startedAt+(w.durationMin||0)*60000;SOC.lb={};REV.key=null;touchWorkout(w);render()}break}
+    case'adate':if(el.value){if(S.active.backfill&&el.value>today()){el.value=S.active.date;toast('Datum liegt in der Zukunft');break}S.active.date=el.value;touchCore()}break;
+    case'atime':if(el.value){S.active.time=el.value;touchCore()}break;
+    case'wdate':{const w=S.workouts.find(w=>w.id===id);if(!w||!el.value)break;if(el.value>today()){el.value=w.date;toast('Datum liegt in der Zukunft');break}
+      const t=w.startedAt?hhmm(w.startedAt):'18:00';w.date=el.value;w.startedAt=atTime(w.date,t);w.finishedAt=w.startedAt+(w.durationMin||0)*60000;SOC.lb={};REV.key=null;touchWorkout(w);render();toast('Datum geändert');break}
+    case'wtime':{const w=S.workouts.find(w=>w.id===id);if(!w||!el.value)break;w.startedAt=atTime(w.date,el.value);w.finishedAt=w.startedAt+(w.durationMin||0)*60000;touchWorkout(w);render();toast('Startzeit geändert');break}
     case'addex':if(el.value){S.active.entries.push({exId:el.value,uni:!!exById(el.value)?.uni||undefined,sets:defaultSets(el.value)});touchCore();render()}break;
     case'padd':if(el.value){planById(id).exerciseIds.push(el.value);touchCore();render()}break;
     case'pname':{const v=el.value.trim();if(v){planById(id).name=v;touchCore()}else el.value=planById(id).name;break}

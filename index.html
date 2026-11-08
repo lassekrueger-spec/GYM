@@ -87,6 +87,18 @@ details summary::-webkit-details-marker{display:none}
 .uni-pill{font-size:11px;font-weight:700;padding:5px 8px;border-radius:999px;background:transparent;border:1px solid var(--line);color:var(--mute);flex:none}
 .uni-pill.on{background:var(--acc);border-color:var(--acc);color:var(--accInk)}
 .plist .it .grow{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ph{display:flex;align-items:center;gap:10px;cursor:pointer;margin:-2px 0}
+.ph .chev{color:var(--mute);font-size:20px;font-weight:700;width:14px;text-align:center;transition:transform .15s}
+.ph.open .chev{transform:rotate(90deg)}
+.ph .title{font-size:18px;font-weight:800}
+.sw{width:48px;height:28px;border-radius:999px;background:var(--card2);border:1px solid var(--line);position:relative;padding:0;flex:none}
+.sw::after{content:'';position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:var(--mute);transition:left .15s}
+.sw.on{background:var(--acc);border-color:var(--acc)}.sw.on::after{left:23px;background:var(--accInk)}
+.sw:active{transform:none}
+.card.inact .ph .title{color:var(--mute)}
+.pub{font-size:11px;font-weight:700;color:var(--acc);border:1px solid var(--acc);border-radius:999px;padding:1px 7px;margin-left:6px;vertical-align:3px}
+.gp-ex{display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-top:1px solid var(--line);font-size:14px}
+.gp-ex:first-child{border-top:0}
 .icon-btn{background:var(--card2);width:34px;height:34px;padding:0;border-radius:9px;font-size:15px;flex:none}
 .lib-row{display:grid;grid-template-columns:1fr 112px 34px;gap:6px;margin-bottom:6px}
 .info-card h3{margin:0 0 6px;font-size:17px;display:flex;gap:10px;align-items:center}
@@ -236,7 +248,7 @@ async function flush(){
   if(!USER||flushing||!dirty.size)return;flushing=true;setSync('syncing');
   const keys=[...dirty];dirty.clear();persistDirty();let ok=true;
   try{
-    if(keys.includes('core')){const{error}=await sb.from('user_state').upsert({user_id:USER.id,data:coreData(),client_updated_at:S.coreUpdatedAt||1});if(error)throw error}
+    if(keys.includes('core')){const{error}=await sb.from('user_state').upsert({user_id:USER.id,data:coreData(),client_updated_at:S.coreUpdatedAt||1});if(error)throw error;await syncShared()}
     const ws=keys.filter(k=>k.startsWith('w_')).map(k=>S.workouts.find(w=>'w_'+w.id===k)).filter(Boolean);
     for(let i=0;i<ws.length;i+=200){const{error}=await sb.from('workouts').upsert(ws.slice(i,i+200).map(wRow));if(error)throw error}
   }catch(e){ok=false;keys.forEach(k=>dirty.add(k));persistDirty()}
@@ -244,6 +256,11 @@ async function flush(){
   if(!ok){setSync('error');clearTimeout(flushTimer);flushTimer=setTimeout(flush,20000)}
   else if(dirty.size)scheduleFlush(300);else setSync('ok');
 }
+/* Öffentliche Pläne: Kopie (nur Name + Übungen) für Mitglieder deiner Gruppen */
+let SHARED_SIG=(()=>{try{return localStorage.getItem('gymtracker_sharedsig')}catch(e){return null}})();
+const sharedPayload=()=>S.plans.filter(p=>p.public).slice(0,30).map(p=>({id:p.id,name:p.name,exercises:p.exerciseIds.map(exById).filter(Boolean).slice(0,60).map(e=>({name:e.name,group:e.group,...(e.uni?{uni:true}:{})}))}));
+async function syncShared(){if(!USER)return;const pl=sharedPayload(),sig=USER.id+JSON.stringify(pl);if(sig===SHARED_SIG)return;
+  try{const{error}=await sb.rpc('sync_shared_plans',{p_plans:pl});if(error)return;SHARED_SIG=sig;localStorage.setItem('gymtracker_sharedsig',sig);GP.data={}}catch(e){}}
 async function fetchAllWorkouts(){const out=[];for(let from=0;;from+=1000){const{data,error}=await sb.from('workouts').select('data,client_updated_at').order('id').range(from,from+999);if(error)throw error;out.push(...data);if(data.length<1000)return out}}
 let PROFILE=(()=>{try{return JSON.parse(localStorage.getItem('gymtracker_profile'))}catch(e){return null}})();
 function saveProfileCache(){try{PROFILE?localStorage.setItem('gymtracker_profile',JSON.stringify(PROFILE)):localStorage.removeItem('gymtracker_profile')}catch(e){}}
@@ -337,7 +354,7 @@ const ICONS={
   plaene:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="5" y="4" width="14" height="17" rx="2.5"/><path d="M9 9h6M9 13h6M9 17h3"/></svg>',
   mehr:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="5.5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="18.5" cy="12" r="1.3"/></svg>'};
 const TABS=[['training','Training'],['statistik','Statistik'],['social','Social'],['plaene','Pläne'],['mehr','Mehr']];
-const curTab=()=>{const h=location.hash.slice(1);return h==='info'||h==='verlauf'||h==='rueckblick'||TABS.some(t=>t[0]===h)?h:'training'};
+const curTab=()=>{const h=location.hash.slice(1);return h==='info'||h==='verlauf'||h==='rueckblick'||h==='gruppenplaene'||TABS.some(t=>t[0]===h)?h:'training'};
 
 
 /* ---------- Statistik ---------- */
@@ -570,11 +587,12 @@ function viewSocial(){
     if(m==='streak')h+=`<div class="muted sm" style="padding:0 4px 10px">Serie = Wochen am Stück, in denen jemand sein eigenes Wochenziel geschafft hat. Die laufende Woche zählt, sobald das Ziel erreicht ist.</div>`;
     if(m==='volume_kg')h+=`<div class="muted sm" style="padding:0 4px 10px">Gewicht = Summe aus Gewicht × Wiederholungen aller Sätze (ohne Cardio).</div>`;
   }
+  h+=`<a href="#gruppenplaene" class="plan-btn" style="text-decoration:none;color:inherit"><div><div style="font-weight:700">📋 Pläne der Gruppe</div><div class="meta">Trainingspläne, die deine Freunde öffentlich gestellt haben</div></div><span class="go">›</span></a>`;
   h+=`<details class="card grp"><summary><div class="between"><div class="sm"><b>👥 ${esc(g.name)}</b> <span class="muted">· ${g.count} Mitglied${g.count===1?'':'er'}</span></div><span class="muted sm">verwalten ▾</span></div></summary>
   <div class="row sm" style="margin-top:10px;flex-wrap:wrap"><span class="muted">Code:</span><b style="letter-spacing:.12em;font-family:ui-monospace,Menlo,monospace">${esc(g.code)}</b><span class="grow"></span><button class="sm primary" data-act="soc-share" data-id="${g.id}">Freunde einladen</button></div>
   ${PUSH.on?`<label class="toggle"><input type="checkbox" data-act="soc-notify" data-id="${g.id}" ${PUSH.mute[g.id]?'':'checked'}>🔔 Mitteilungen aus dieser Gruppe</label>`:''}
   <div class="actions" style="margin-top:6px"><button class="ghost sm" data-act="soc-refresh" style="padding-left:0">Aktualisieren</button><span class="grow"></span><button class="ghost sm danger" data-act="soc-leave" data-id="${g.id}" data-confirm="1">Gruppe verlassen</button></div></details>`;
-  h+=`<div class="muted sm" style="padding:0 4px 12px">Geteilt werden nur Summen (Anzahl Trainings, Zeit, Gewicht, Serie) und dein Name. Schließt du ein Training ab, bekommt deine Gruppe eine kurze Mitteilung – ohne Details. Einzelne Trainings und dein Körpergewicht sieht niemand.</div>`;
+  h+=`<div class="muted sm" style="padding:0 4px 12px">Geteilt werden nur Summen (Anzahl Trainings, Zeit, Gewicht, Serie) und dein Name. Schließt du ein Training ab, bekommt deine Gruppe eine kurze Mitteilung – ohne Details. Einzelne Trainings und dein Körpergewicht sieht niemand. Pläne nur, wenn du sie öffentlich stellst.</div>`;
   return h;
 }
 async function socAction(act,b){
@@ -651,17 +669,18 @@ function viewTraining(){
   const nameBanner=USER&&PROFILE?.uid!==USER.id?`<a href="#mehr" class="plan-btn" style="text-decoration:none;color:inherit;border:1px dashed var(--line);background:transparent"><div><div style="font-weight:700">👋 Wie sollen dich deine Freunde sehen?</div><div class="meta">Leg unter „Mehr“ deinen Namen für die Rankings fest</div></div><span class="go">›</span></a>`:'';
   const accBanner=nameBanner||(sb&&!USER?`<a href="#mehr" class="plan-btn" style="text-decoration:none;color:inherit;border:1px dashed var(--line);background:transparent"><div><div style="font-weight:700">☁️ Daten online sichern</div><div class="meta">Kostenloses Konto anlegen – dann ist nichts mehr nur auf dem Handy</div></div><span class="go">›</span></a>`:'');
   const ws=workoutsSorted(),st=weekStart(new Date()),done=ws.filter(w=>parseD(w.date)>=st).length,goal=S.settings.weeklyGoal||3;
-  const lastDate=p=>ws.find(w=>w.planId===p.id)?.date||null;
-  let sugg=null;for(const p of S.plans){const d=lastDate(p);if(!sugg||(d===null&&sugg.d!==null)||(d!==null&&sugg.d!==null&&d<sugg.d))sugg={p,d}}
+  const lastDate=p=>ws.find(w=>w.planId===p.id)?.date||null,plans=S.plans.filter(isActivePlan);
+  let sugg=null;for(const p of plans){const d=lastDate(p);if(!sugg||(d===null&&sugg.d!==null)||(d!==null&&sugg.d!==null&&d<sugg.d))sugg={p,d}}
   let h=accBanner+`<div class="card week"><div class="between"><div><div class="muted sm">Diese Woche</div><div class="big">${done} <span class="muted" style="font-size:20px">/ ${goal}</span></div></div><div class="muted sm" style="text-align:right">${done>=goal?'Wochenziel geschafft 🎉':`noch ${goal-done} bis zum Ziel`}</div></div><div class="bars">${Array.from({length:Math.max(goal,done)},(_,i)=>`<i class="${i<done?'on':''}"></i>`).join('')}</div></div>`;
   h+=`<h2>Training starten</h2>`;
   if(!S.plans.length)h+=`<div class="empty">Noch keine Pläne. Leg unter „Pläne“ einen an.</div>`;
-  for(const p of S.plans){const d=lastDate(p);
-    h+=`<button class="plan-btn" data-act="start" data-id="${p.id}"><div><div class="name">${esc(p.name)}${sugg&&sugg.p===p&&S.plans.length>1?'<span class="badge">Als Nächstes</span>':''}</div><div class="meta">${p.exerciseIds.length} Übungen · ${d?'zuletzt '+daysAgo(d):'noch nie'}</div></div><span class="go">›</span></button>`}
+  else if(!plans.length)h+=`<a href="#plaene" class="plan-btn" style="text-decoration:none;color:inherit;border:1px dashed var(--line);background:transparent"><div><div style="font-weight:700">Kein Plan aktiv</div><div class="meta">Schalte unter „Pläne“ die Pläne ein, die du gerade machst</div></div><span class="go">›</span></a>`;
+  for(const p of plans){const d=lastDate(p);
+    h+=`<button class="plan-btn" data-act="start" data-id="${p.id}"><div><div class="name">${esc(p.name)}${sugg&&sugg.p===p&&plans.length>1?'<span class="badge">Als Nächstes</span>':''}</div><div class="meta">${p.exerciseIds.length} Übungen · ${d?'zuletzt '+daysAgo(d):'noch nie'}</div></div><span class="go">›</span></button>`}
   h+=`<button class="ghost block" data-act="start" data-id="">+ Freies Training ohne Plan</button>`;
   if(!BACKFILL)h+=`<button class="ghost block sm" data-act="backfill-open" style="margin-top:4px">🕓 Training vergessen? Nachtragen</button>`;
   else{h+=`<h2>Training nachtragen</h2><div class="muted sm" style="padding:0 4px 10px">Welchen Plan hast du gemacht? Datum, Uhrzeit und Dauer stellst du gleich danach ein.</div>`;
-    for(const p of S.plans)h+=`<button class="plan-btn" data-act="start" data-id="${p.id}" data-back="1"><div><div class="name">${esc(p.name)}</div><div class="meta">nachtragen</div></div><span class="go">›</span></button>`;
+    for(const p of plans)h+=`<button class="plan-btn" data-act="start" data-id="${p.id}" data-back="1"><div><div class="name">${esc(p.name)}</div><div class="meta">nachtragen</div></div><span class="go">›</span></button>`;
     h+=`<div class="row"><button class="ghost grow" data-act="start" data-id="" data-back="1">Ohne Plan nachtragen</button><button class="ghost" data-act="backfill-open">Abbrechen</button></div>`}
   return h;
 }
@@ -716,16 +735,75 @@ function viewVerlaufList(){
   <div class="bf-grid" style="margin-top:10px"><label>Datum<input type="date" data-act="wdate" data-id="${w.id}" max="${today()}" value="${esc(w.date)}"></label><label>Start<input type="time" data-act="wtime" data-id="${w.id}" value="${w.startedAt?hhmm(w.startedAt):''}"></label><label>Dauer<span class="row"><input inputmode="numeric" pattern="[0-9]*" data-act="dur" data-id="${w.id}" value="${w.durationMin??''}" placeholder="–">Min.</span></label></div>
   <div class="actions" style="margin-top:8px"><span class="grow"></span><button class="ghost sm danger" data-act="delw" data-id="${w.id}" data-confirm="1">Training löschen</button></div></details>`).join('');
 }
+const isActivePlan=p=>!p.inactive;
+const PLAN_OPEN=new Set((()=>{try{return JSON.parse(localStorage.getItem('gymtracker_planopen'))||[]}catch(e){return[]}})());
+function savePlanOpen(){try{localStorage.setItem('gymtracker_planopen',JSON.stringify([...PLAN_OPEN]))}catch(e){}}
+function planCard(p){
+  const open=PLAN_OPEN.has(p.id),on=isActivePlan(p),n=p.exerciseIds.length;
+  let h=`<div class="card ${on?'':'inact'}"><div class="ph ${open?'open':''}" data-act="pexp" data-id="${p.id}"><span class="chev">›</span><div class="grow" style="min-width:0"><div class="title">${esc(p.name)}${p.public?'<span class="pub">öffentlich</span>':''}</div><div class="muted sm">${n} Übung${n===1?'':'en'}${open||!n?'':' · '+esc(p.exerciseIds.slice(0,3).map(id=>exName(id)).join(', '))+(n>3?' …':'')}</div></div><button class="sw ${on?'on':''}" data-act="pact" data-id="${p.id}" aria-label="${on?'Aktiv':'Nicht aktiv'}"></button></div>`;
+  if(!open)return h+`</div>`;
+  h+=`<div class="row" style="margin:12px 0 8px"><input class="grow" data-act="pname" data-id="${p.id}" value="${esc(p.name)}" style="font-weight:700;font-size:17px"><button class="icon-btn danger" data-act="delplan" data-id="${p.id}" data-confirm="1" title="Plan löschen">🗑</button></div><div class="plist">`;
+  p.exerciseIds.forEach((eid,k)=>{const ex=exById(eid),uc=!!ex?.uni,cardio=ex?.group==='Cardio';h+=`<div class="it"><span class="grow">${esc(exName(eid))}</span>${cardio?'':`<button class="uni-pill ${uc?'on':''}" data-act="exuni" data-id="${eid}">1-armig</button>`}<button class="icon-btn" data-act="pup" data-id="${p.id}" data-k="${k}">↑</button><button class="icon-btn" data-act="pdown" data-id="${p.id}" data-k="${k}">↓</button><button class="icon-btn" data-act="prm" data-id="${p.id}" data-k="${k}">✕</button></div>`});
+  if(!n)h+=`<div class="muted sm" style="padding:6px 0">Noch keine Übungen</div>`;
+  h+=`</div><select data-act="padd" data-id="${p.id}" style="margin-top:8px"><option value="">+ Übung hinzufügen…</option>${exOptions(new Set(p.exerciseIds))}</select>`;
+  h+=USER?`<label class="toggle"><input type="checkbox" data-act="ppub" data-id="${p.id}" ${p.public?'checked':''}>🌍 Öffentlich – Leute aus deinen Gruppen sehen den Plan und können ihn übernehmen</label>`
+    :sb?`<div class="muted sm" style="margin-top:10px">🌍 Mit Konto kannst du Pläne für deine Gruppen öffentlich stellen.</div>`:'';
+  h+=`<div class="muted sm" style="margin-top:8px">„1-armig“: links und rechts getrennt eintragen.</div>`;
+  return h+`</div>`;
+}
+/* Pläne der Gruppe */
+const GP={data:{},at:{},loading:false,err:'',open:new Set()};
+async function loadGroupPlans(gid,force){if(!USER||!gid||GP.loading)return;if(!force&&GP.data[gid]&&Date.now()-GP.at[gid]<30000)return;
+  GP.loading=true;if(dirty.has('core'))await flush();else await syncShared();
+  const{data,error}=await sb.rpc('group_plans',{p_group:gid});GP.loading=false;
+  if(error)GP.err=socErr(error);else{GP.err='';GP.data[gid]=data||[];GP.at[gid]=Date.now()}
+  if(curTab()==='gruppenplaene'){const typing=document.activeElement&&/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);if(!typing)render()}}
+function viewGroupPlans(){
+  let h=`<a href="#plaene" class="back">‹ Pläne</a>`;
+  if(!sb)return h+`<div class="empty">Braucht eine Internetverbindung.</div>`;
+  if(!USER)return h+`<div class="card"><div class="muted sm" style="margin-bottom:10px">Um Pläne mit deinen Gruppen zu teilen, brauchst du ein Konto.</div><a href="#mehr" class="plan-btn" style="text-decoration:none;color:inherit;background:var(--card2);margin:0"><div style="font-weight:700">Anmelden oder registrieren</div><span class="go">›</span></a></div>`;
+  if(SOC.groups===null){setTimeout(async()=>{await loadGroups();if(curTab()==='gruppenplaene')render()},0);return h+`<div class="empty">Lädt …</div>`}
+  if(!SOC.groups.length)return h+`<div class="empty">Du bist noch in keiner Gruppe.<br><a href="#social" style="color:var(--acc)">Unter „Social“ beitreten oder gründen</a></div>`;
+  const g=SOC.groups.find(x=>x.id===SOC.gid)||SOC.groups[0];
+  if(SOC.groups.length>1)h+=`<div class="chips scroll">${SOC.groups.map(x=>`<button class="chip ${x.id===g.id?'on':''}" data-act="gp-group" data-id="${x.id}">${esc(x.name)}</button>`).join('')}</div>`;
+  if(GP.err)h+=`<div class="card sm warn">${esc(GP.err)}</div>`;
+  const rows=GP.data[g.id];
+  if(!rows){setTimeout(()=>loadGroupPlans(g.id),0);return h+`<div class="card empty">Lädt …</div>`}
+  const others=rows.filter(r=>!r.is_me),mine=rows.filter(r=>r.is_me);
+  if(!others.length)h+=`<div class="card"><div style="font-weight:700;margin-bottom:4px">Noch keine Pläne in „${esc(g.name)}“</div><div class="muted sm">Sobald jemand einen Plan öffentlich stellt, taucht er hier auf. So geht's: Pläne → Plan antippen → „🌍 Öffentlich“ anhaken.</div></div>`;
+  let last=null;
+  others.forEach(r=>{if(r.user_id!==last){h+=`<h2>${esc(r.display_name)}</h2>`;last=r.user_id}h+=gpCard(r,rows.indexOf(r))});
+  h+=`<h2>Deine öffentlichen Pläne</h2>`;
+  h+=mine.length?`<div class="card sm">${mine.map(r=>esc(r.name)).join(' · ')}</div>`:`<div class="muted sm" style="padding:0 4px 12px">Du teilst gerade keinen Plan. Unter „Pläne“ einen Plan antippen und „🌍 Öffentlich“ anhaken.</div>`;
+  h+=`<div class="muted sm" style="padding:0 4px 12px">Geteilt werden nur Name und Übungen eines Plans – keine Gewichte oder Trainings.</div>`;
+  return h;
+}
+function gpCard(r,k){
+  const key=r.user_id+'|'+r.plan_id,open=GP.open.has(key),ex=Array.isArray(r.exercises)?r.exercises:[];
+  const have=S.plans.some(p=>p.from&&p.from.u===r.user_id&&p.from.p===r.plan_id);
+  let h=`<div class="card"><div class="ph ${open?'open':''}" data-act="gp-exp" data-id="${esc(key)}"><span class="chev">›</span><div class="grow" style="min-width:0"><div class="title">${esc(r.name)}${have?'<span class="pub">übernommen</span>':''}</div><div class="muted sm">${ex.length} Übung${ex.length===1?'':'en'}${open||!ex.length?'':' · '+esc(ex.slice(0,3).map(e=>e.name).join(', '))+(ex.length>3?' …':'')}</div></div></div>`;
+  if(open){h+=`<div style="margin-top:10px">${ex.map(e=>`<div class="gp-ex"><span>${esc(e.name)}${e.uni?' <span class="muted">· 1-armig</span>':''}</span><span class="muted">${esc(e.group||'')}</span></div>`).join('')||'<div class="muted sm">Keine Übungen</div>'}</div>
+    <button class="${have?'':'primary'} block sm" data-act="gp-copy" data-k="${k}" style="margin-top:10px;padding:12px">${have?'Nochmal übernehmen':'📥 In meine Pläne übernehmen'}</button>`}
+  return h+`</div>`;
+}
+function copyGroupPlan(r){
+  const ids=[];let added=0;
+  for(const x of(Array.isArray(r.exercises)?r.exercises:[])){const n=String(x.name||'').trim().slice(0,80);if(!n)continue;
+    let e=S.exercises.find(e=>e.name.trim().toLowerCase()===n.toLowerCase());
+    if(!e){e={id:uid(),name:n,group:GROUPS.includes(x.group)?x.group:'Sonstiges'};if(x.uni&&e.group!=='Cardio')e.uni=true;S.exercises.push(e);added++}
+    if(!ids.includes(e.id))ids.push(e.id)}
+  const p={id:uid(),name:`${String(r.name).slice(0,40)} (${String(r.display_name).slice(0,20)})`,exerciseIds:ids,from:{u:r.user_id,p:r.plan_id}};
+  S.plans.push(p);PLAN_OPEN.add(p.id);savePlanOpen();touchCore();render();
+  toast(`„${p.name}“ übernommen${added?` · ${added} neue Übung${added===1?'':'en'}`:''} – jetzt unter Training`);
+}
 function viewPlaene(){
-  let h=`<h2>Trainingspläne</h2>`;
-  S.plans.forEach(p=>{
-    h+=`<div class="card"><div class="row" style="margin-bottom:8px"><input class="grow" data-act="pname" data-id="${p.id}" value="${esc(p.name)}" style="font-weight:700;font-size:18px"><button class="icon-btn danger" data-act="delplan" data-id="${p.id}" data-confirm="1" title="Plan löschen">🗑</button></div><div class="plist">`;
-    p.exerciseIds.forEach((eid,k)=>{const ex=exById(eid),uc=!!ex?.uni,cardio=ex?.group==='Cardio';h+=`<div class="it"><span class="grow">${esc(exName(eid))}</span>${cardio?'':`<button class="uni-pill ${uc?'on':''}" data-act="exuni" data-id="${eid}">1-armig</button>`}<button class="icon-btn" data-act="pup" data-id="${p.id}" data-k="${k}">↑</button><button class="icon-btn" data-act="pdown" data-id="${p.id}" data-k="${k}">↓</button><button class="icon-btn" data-act="prm" data-id="${p.id}" data-k="${k}">✕</button></div>`});
-    if(!p.exerciseIds.length)h+=`<div class="muted sm" style="padding:6px 0">Noch keine Übungen</div>`;
-    h+=`</div><select data-act="padd" data-id="${p.id}" style="margin-top:8px"><option value="">+ Übung hinzufügen…</option>${exOptions(new Set(p.exerciseIds))}</select></div>`;
-  });
-  if(S.plans.length)h+=`<div class="muted sm" style="padding:0 4px 12px">„1-armig“ markiert Übungen, die du mit einem Arm oder Bein machst. Im Training trägst du dann links und rechts getrennt ein.</div>`;
+  const on=S.plans.filter(isActivePlan),off=S.plans.filter(p=>!isActivePlan(p));
+  let h=`<h2>Aktive Pläne · ${on.length}</h2>`;
+  h+=on.length?on.map(planCard).join(''):`<div class="muted sm" style="padding:0 4px 12px">${S.plans.length?'Kein Plan aktiv – schalte unten die ein, die du gerade machst.':'Noch keine Pläne.'}</div>`;
+  if(off.length)h+=`<h2>Nicht aktiv · ${off.length}</h2>`+off.map(planCard).join('');
+  if(S.plans.length)h+=`<div class="muted sm" style="padding:0 4px 12px">Nur aktive Pläne erscheinen unter „Training“. Tipp auf einen Plan, um seine Übungen zu sehen und zu bearbeiten.</div>`;
   h+=`<button class="block" data-act="newplan">+ Neuer Plan</button>`;
+  if(sb)h+=`<a href="#gruppenplaene" class="plan-btn" style="text-decoration:none;color:inherit;margin-top:10px"><div><div style="font-weight:700">👥 Pläne deiner Gruppen</div><div class="meta">Öffentliche Pläne von Freunden ansehen und übernehmen</div></div><span class="go">›</span></a>`;
   h+=`<h2>Übungsbibliothek</h2><div class="card"><div class="lib-row"><input id="newExName" placeholder="Neue Übung, z. B. Dips"><select id="newExGroup">${GROUPS.map(g=>`<option>${g}</option>`).join('')}</select><button class="icon-btn primary" data-act="newex">+</button></div></div>`;
   for(const g of GROUPS){const xs=S.exercises.filter(e=>e.group===g).sort((a,b)=>a.name.localeCompare(b.name,'de'));if(!xs.length)continue;
     h+=`<div class="card"><div class="muted sm" style="font-weight:700;margin-bottom:8px">${g}</div>${xs.map(e=>`<div class="lib-row"><input data-act="exname" data-id="${e.id}" value="${esc(e.name)}"><select data-act="exgroup" data-id="${e.id}">${GROUPS.map(x=>`<option ${x===e.group?'selected':''}>${x}</option>`).join('')}</select><button class="icon-btn danger" data-act="delex" data-id="${e.id}" data-confirm="1">🗑</button></div>`).join('')}</div>`}
@@ -754,10 +832,10 @@ function viewMehr(){
 }
 function render(){
   const tab=curTab();
-  const body={training:viewTraining,statistik:viewStatistik,verlauf:viewVerlauf,plaene:viewPlaene,mehr:viewMehr,info:viewInfo,social:viewSocial,rueckblick:viewRueckblick}[tab]();
-  const title={training:S.active?(S.active.backfill?'Nachtragen':'Training läuft'):'Training',statistik:'Statistik',social:'Social',verlauf:'Verlauf',plaene:'Pläne',mehr:'Mehr',info:'Warum tracken?',rueckblick:'Wochenrückblick'}[tab];
+  const body={training:viewTraining,statistik:viewStatistik,verlauf:viewVerlauf,plaene:viewPlaene,mehr:viewMehr,info:viewInfo,social:viewSocial,rueckblick:viewRueckblick,gruppenplaene:viewGroupPlans}[tab]();
+  const title={training:S.active?(S.active.backfill?'Nachtragen':'Training läuft'):'Training',statistik:'Statistik',social:'Social',verlauf:'Verlauf',plaene:'Pläne',mehr:'Mehr',info:'Warum tracken?',rueckblick:'Wochenrückblick',gruppenplaene:'Pläne der Gruppe'}[tab];
   document.getElementById('app').innerHTML=`<header><h1>${title}</h1>${syncHTML()}</header>${body}`;
-  document.getElementById('nav').innerHTML=`${TABS.map(([k,l])=>`<a href="#${k}" class="${k===tab||((tab==='info'||tab==='verlauf')&&k==='mehr')||(tab==='rueckblick'&&k==='statistik')?'on':''}">${ICONS[k]}${l}${k==='training'&&S.active&&tab!=='training'?' •':''}</a>`).join('')}`;
+  document.getElementById('nav').innerHTML=`${TABS.map(([k,l])=>`<a href="#${k}" class="${k===tab||((tab==='info'||tab==='verlauf')&&k==='mehr')||(tab==='rueckblick'&&k==='statistik')||(tab==='gruppenplaene'&&k==='plaene')?'on':''}">${ICONS[k]}${l}${k==='training'&&S.active&&tab!=='training'?' •':''}</a>`).join('')}`;
 }
 // iOS-Homescreen-Bug: Bei durchsichtiger Statusleiste meldet iOS den Bildschirm manchmal zu kurz -> Leiste würde über dem unteren Rand schweben
 function fixGap(){const st=navigator.standalone||matchMedia('(display-mode: standalone)').matches;let g=0;
@@ -765,7 +843,7 @@ function fixGap(){const st=navigator.standalone||matchMedia('(display-mode: stan
   document.documentElement.style.setProperty('--gap',g+'px');window.__gap=g}
 fixGap();window.addEventListener('resize',fixGap);window.addEventListener('orientationchange',()=>setTimeout(fixGap,300));
 function toTop(smooth){const sc=document.getElementById('scroller');sc&&sc.scrollTo({top:0,behavior:smooth?'smooth':'auto'})}
-window.addEventListener('hashchange',()=>{if(curTab()==='social'&&USER&&SOC.groups)setTimeout(()=>loadLB(),0);exportText=null;render();toTop()});
+window.addEventListener('hashchange',()=>{if(curTab()==='social'&&USER&&SOC.groups)setTimeout(()=>loadLB(),0);if(curTab()==='gruppenplaene'&&USER&&SOC.gid)setTimeout(()=>loadGroupPlans(SOC.gid,true),0);exportText=null;render();toTop()});
 
 /* ---------- Actions ---------- */
 const hhmm=t=>{const d=new Date(t);return pad(d.getHours())+':'+pad(d.getMinutes())};
@@ -831,8 +909,13 @@ document.addEventListener('click',async ev=>{
     case'delw':{const w=S.workouts.find(w=>w.id===id);if(w){w.deleted=true;touchWorkout(w);render();toast('Training gelöscht')}break}
     case'pup':case'pdown':{const p=planById(id);if(move(p.exerciseIds,+b.dataset.k,act==='pup'?-1:1)){touchCore();render()}break}
     case'prm':{const p=planById(id);p.exerciseIds.splice(+b.dataset.k,1);touchCore();render();break}
-    case'delplan':S.plans=S.plans.filter(p=>p.id!==id);touchCore();render();break;
-    case'newplan':S.plans.push({id:uid(),name:'Neuer Plan',exerciseIds:[]});touchCore();render();setTimeout(()=>{const ins=document.querySelectorAll('[data-act=pname]');const el=ins[ins.length-1];el&&(el.focus(),el.select())},50);break;
+    case'delplan':S.plans=S.plans.filter(p=>p.id!==id);PLAN_OPEN.delete(id);savePlanOpen();touchCore();render();break;
+    case'newplan':{const np={id:uid(),name:'Neuer Plan',exerciseIds:[]};S.plans.push(np);PLAN_OPEN.add(np.id);savePlanOpen();touchCore();render();setTimeout(()=>{const el=document.querySelector(`[data-act=pname][data-id="${np.id}"]`);el&&(el.scrollIntoView({block:'center'}),el.focus(),el.select())},50);break}
+    case'pexp':PLAN_OPEN.has(id)?PLAN_OPEN.delete(id):PLAN_OPEN.add(id);savePlanOpen();render();break;
+    case'pact':{const p=planById(id);if(!p)break;p.inactive=!p.inactive||undefined;touchCore();render();toast(p.inactive?`„${p.name}“ deaktiviert`:`„${p.name}“ aktiv – erscheint unter Training`);break}
+    case'gp-group':setGid(id);GP.err='';render();loadGroupPlans(id);break;
+    case'gp-exp':GP.open.has(id)?GP.open.delete(id):GP.open.add(id);render();break;
+    case'gp-copy':{const r=(GP.data[SOC.gid]||GP.data[(SOC.groups||[])[0]?.id]||[])[+b.dataset.k];if(r)copyGroupPlan(r);break}
     case'newex':{const n=document.getElementById('newExName').value.trim();if(!n){toast('Name eingeben');return}
       if(S.exercises.some(e=>e.name.toLowerCase()===n.toLowerCase())){toast('Die Übung gibt es schon');return}
       S.exercises.push({id:uid(),name:n,group:document.getElementById('newExGroup').value});touchCore();render();toast(`„${n}“ angelegt`);break}
@@ -887,6 +970,7 @@ document.addEventListener('change',ev=>{
       const t=w.startedAt?hhmm(w.startedAt):'18:00';w.date=el.value;w.startedAt=atTime(w.date,t);w.finishedAt=w.startedAt+(w.durationMin||0)*60000;SOC.lb={};REV.key=null;touchWorkout(w);render();toast('Datum geändert');break}
     case'wtime':{const w=S.workouts.find(w=>w.id===id);if(!w||!el.value)break;w.startedAt=atTime(w.date,el.value);w.finishedAt=w.startedAt+(w.durationMin||0)*60000;touchWorkout(w);render();toast('Startzeit geändert');break}
     case'addex':if(el.value){S.active.entries.push({exId:el.value,uni:!!exById(el.value)?.uni||undefined,sets:defaultSets(el.value)});touchCore();render()}break;
+    case'ppub':{const p=planById(id);if(!p)break;p.public=el.checked||undefined;touchCore();render();toast(p.public?`„${p.name}“ ist jetzt für deine Gruppen sichtbar 🌍`:`„${p.name}“ ist wieder privat`);break}
     case'padd':if(el.value){planById(id).exerciseIds.push(el.value);touchCore();render()}break;
     case'pname':{const v=el.value.trim();if(v){planById(id).name=v;touchCore()}else el.value=planById(id).name;break}
     case'exname':{const v=el.value.trim(),e=exById(id);if(v){e.name=v;touchCore()}else el.value=e.name;break}

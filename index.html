@@ -360,16 +360,18 @@ const curTab=()=>{const h=location.hash.slice(1);return h==='info'||h==='verlauf
 /* ---------- Statistik ---------- */
 let statEx=null;
 function lastBW(){for(const w of workoutsSorted())if(w.bodyweight!=null)return w.bodyweight;return null}
-const e1rm=s=>s.w==null||!s.r||s.w<=0?null:(s.r===1?s.w:s.w*(1+s.r/30));
 function exSeries(exId){
   const ws=workoutsSorted().slice().reverse();
   const cardio=ws.some(w=>w.entries.some(e=>e.exId===exId&&e.sets.some(s=>s.t!=null)));
   if(cardio){const points=[];for(const w of ws){const e=w.entries.find(e=>e.exId===exId);if(!e)continue;let l=null,t=0;for(const s of e.sets){if(s.l!=null&&(l==null||s.l>l))l=s.l;t+=s.t||0}if(l!=null||t)points.push({date:w.date,v:l??0,t})}return{cardio:true,weighted:false,points}}
   const weighted=ws.some(w=>w.entries.some(e=>e.exId===exId&&e.sets.some(s=>(s.w!=null&&s.w>0)||(s.w2!=null&&s.w2>0))));
   const points=[];
-  for(const w of ws){const e=w.entries.find(e=>e.exId===exId);if(!e)continue;let v=null;
-    for(const s of e.sets)for(const x of weighted?[e1rm(s),e1rm({w:s.w2,r:s.r2})]:[s.r,s.r2])if(x!=null&&(v==null||x>v))v=x
-    if(v!=null)points.push({date:w.date,v})}
+  // Schwerstes Gewicht pro Training (bei gleichem Gewicht: meiste Wdh.); ohne Gewicht: max. Wdh.
+  for(const w of ws){const e=w.entries.find(e=>e.exId===exId);if(!e)continue;let v=null,reps=null;
+    for(const s of e.sets)for(const[x,rr]of[[s.w,s.r],[s.w2,s.r2]]){
+      if(weighted){if(x!=null&&x>0&&(v==null||x>v||(x===v&&(rr||0)>(reps||0)))){v=x;reps=rr??null}}
+      else if(x==null&&rr!=null&&(v==null||rr>v))v=rr}
+    if(v!=null)points.push({date:w.date,v,reps})}
   return{weighted,points};
 }
 function bwSeries(){return workoutsSorted().slice().reverse().filter(w=>w.bodyweight!=null).map(w=>({date:w.date,v:w.bodyweight}))}
@@ -449,13 +451,13 @@ function viewStatistik(){
     const x=exs.find(x=>x.id===statEx),cls=strengthCls(x.p),last=x.points[x.points.length-1].v,showBW=!x.cardio&&S.settings.showBW!==false&&bw.length>0;
     h+=`<div class="card"><select data-act="statex">${exs.map(e=>`<option value="${e.id}" ${e.id===statEx?'selected':''}>${esc(e.name)}</option>`).join('')}</select>
     <div class="kpi"><span class="v">${fmtVal(last,x.weighted,x.cardio)}</span><span class="trend ${cls}">${fmtPct(x.p)}</span></div>
-    <div class="muted sm">${x.cardio?`höchste Stufe · zuletzt ${fmtW(x.points[x.points.length-1].t)} Min.`:x.weighted?'geschätztes Maximum (1RM)':'max. Wiederholungen'}${x.rp.length>=2?` · ${fmtVal(x.rp[0].v,x.weighted,x.cardio)} → ${fmtVal(x.rp[x.rp.length-1].v,x.weighted,x.cardio)}`:''}</div>
+    <div class="muted sm">${x.cardio?`höchste Stufe · zuletzt ${fmtW(x.points[x.points.length-1].t)} Min.`:x.weighted?`schwerstes Gewicht${x.points[x.points.length-1].reps?` · zuletzt ${fmtW(last)} kg × ${x.points[x.points.length-1].reps}`:''}`:'max. Wiederholungen'}${x.rp.length>=2?` · ${fmtVal(x.rp[0].v,x.weighted,x.cardio)} → ${fmtVal(x.rp[x.rp.length-1].v,x.weighted,x.cardio)}`:''}</div>
     ${x.rp.length?chartSVG([{points:x.rp,color:CLR[cls],axis:'l'},...(x.cardio?[{points:x.rp.map(p=>({date:p.date,v:p.t})),color:'#7cc4ff',axis:'r',dashed:true}]:[]),...(showBW?[{points:bw,color:'#8b94a5',axis:'r',dashed:true}]:[])]):`<div class="muted sm" style="margin-top:8px">Keine Werte in diesem Zeitraum.</div>`}
     ${x.cardio&&x.rp.length?`<div class="legend"><span><i style="background:${CLR[cls]}"></i>Stufe (links)</span><span><i style="background:#7cc4ff"></i>Minuten (rechts)</span></div>`:''}
-    ${showBW&&x.rp.length?`<div class="legend"><span><i style="background:${CLR[cls]}"></i>${x.weighted?'1RM (links)':'Wdh. (links)'}</span><span><i style="background:#8b94a5"></i>Körpergewicht (rechts)</span></div>`:''}
+    ${showBW&&x.rp.length?`<div class="legend"><span><i style="background:${CLR[cls]}"></i>${x.weighted?'Gewicht (links)':'Wdh. (links)'}</span><span><i style="background:#8b94a5"></i>Körpergewicht (rechts)</span></div>`:''}
     ${bw.length&&!x.cardio?`<label class="toggle"><input type="checkbox" data-act="showbw" ${showBW?'checked':''}>Körpergewicht im Graph anzeigen</label>`:''}</div>`;
     h+=`<div class="card ex-list">${exs.slice().sort((a,b)=>(b.p??-1e9)-(a.p??-1e9)).map(e=>`<button class="r" data-act="selex" data-id="${e.id}"><span class="grow">${esc(e.name)}</span><span class="muted sm">${fmtVal(e.points[e.points.length-1].v,e.weighted,e.cardio)}</span><span class="pill ${strengthCls(e.p)}"><span class="${strengthCls(e.p)}">${e.p==null?'–':(e.p>0?'+':'')+e.p.toFixed(1).replace('.',',')+'%'}</span></span></button>`).join('')}</div>`;
-    h+=`<div class="muted sm" style="padding:0 4px 8px">Das 1RM schätzt, was du einmal schaffen würdest (Gewicht × Wdh. umgerechnet). So sind z. B. 80 kg × 8 und 85 kg × 5 vergleichbar. Die Prozente vergleichen das erste mit dem letzten Training im gewählten Zeitraum.</div>`;
+    h+=`<div class="muted sm" style="padding:0 4px 8px">Gezeigt wird das schwerste Gewicht, das du pro Training bei der Übung bewegt hast (bei einarmigen Übungen die stärkere Seite). Die Prozente vergleichen das erste mit dem letzten Training im gewählten Zeitraum.</div>`;
   }
   return h;
 }

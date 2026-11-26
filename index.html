@@ -179,6 +179,50 @@ details summary::-webkit-details-marker{display:none}
 </style>
 </head>
 <body>
+<!-- Startanimation: Hantel wird hochgedrückt und rastet ein -->
+<style>
+#splash{position:fixed;inset:0;z-index:50;background:#0e1014;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;pointer-events:none;animation:spOut .45s cubic-bezier(.6,0,.4,1) 1.55s forwards}
+#splash svg{width:min(62vw,260px);height:auto;overflow:visible}
+#splash .lift{transform-origin:120px 60px;animation:spLift .95s cubic-bezier(.3,1.5,.5,1) .35s both}
+#splash .bar{transform-origin:120px 60px;animation:spBar .3s ease-out both}
+#splash .pl{animation:spPlate .32s cubic-bezier(.2,1.4,.5,1) both}
+#splash .pl.l{--x:-70px}#splash .pl.r{--x:70px}
+#splash .pl.i{animation-delay:.08s}#splash .pl.o{animation-delay:.16s}
+#splash .ring{transform-origin:120px 60px;opacity:0;animation:spRing .6s ease-out 1.0s forwards}
+#splash .floor{transform-origin:120px 112px;animation:spFloor .5s ease-out .1s both}
+#splash .word{font:800 30px/1 -apple-system,BlinkMacSystemFont,"SF Pro Display",system-ui,sans-serif;color:#eef1f5;letter-spacing:.5em;padding-left:.5em;opacity:0;animation:spWord .5s cubic-bezier(.2,.9,.3,1) 1.0s both}
+#splash .word b{color:#c8f560}
+@keyframes spBar{from{opacity:0;transform:scaleX(.4)}to{opacity:1;transform:none}}
+@keyframes spPlate{from{opacity:0;transform:translateX(var(--x))}to{opacity:1;transform:none}}
+@keyframes spLift{0%{transform:translateY(42px)}55%{transform:translateY(-14px)}75%{transform:translateY(3px)}100%{transform:translateY(0)}}
+@keyframes spRing{0%{opacity:.9;transform:scale(.6)}100%{opacity:0;transform:scale(1.9)}}
+@keyframes spFloor{from{opacity:0;transform:scaleX(.2)}to{opacity:1;transform:none}}
+@keyframes spWord{from{opacity:0;transform:translateY(14px);letter-spacing:.9em}to{opacity:1;transform:none;letter-spacing:.5em}}
+@keyframes spOut{to{opacity:0;transform:scale(1.08);visibility:hidden}}
+@media (prefers-reduced-motion:reduce){#splash,#splash *{animation-duration:.01s!important;animation-delay:0s!important}}
+</style>
+<div id="splash" aria-hidden="true">
+  <svg viewBox="0 0 240 120">
+    <ellipse class="ring" cx="120" cy="60" rx="96" ry="34" fill="none" stroke="#c8f560" stroke-width="3"/>
+    <rect class="floor" x="40" y="110" width="160" height="3" rx="1.5" fill="#2b303b"/>
+    <g class="lift">
+      <rect class="bar" x="14" y="56" width="212" height="8" rx="4" fill="#c9ced8"/>
+      <rect class="pl l o" x="30" y="30" width="14" height="60" rx="4" fill="#c8f560"/>
+      <rect class="pl l i" x="46" y="38" width="12" height="44" rx="4" fill="#9fc94a"/>
+      <rect class="pl r i" x="182" y="38" width="12" height="44" rx="4" fill="#9fc94a"/>
+      <rect class="pl r o" x="196" y="30" width="14" height="60" rx="4" fill="#c8f560"/>
+      <rect x="62" y="52" width="6" height="16" rx="2" fill="#8b94a5"/>
+      <rect x="172" y="52" width="6" height="16" rx="2" fill="#8b94a5"/>
+    </g>
+  </svg>
+  <div class="word">G<b>Y</b>M</div>
+</div>
+<script>
+(function(){var s=document.getElementById('splash');if(!s)return;
+  s.addEventListener('animationend',function(e){if(e.target===s)s.remove()});
+  setTimeout(function(){s&&s.parentNode&&s.remove()},2600)})();
+</script>
+
 <div id="scroller"><div id="app"></div></div>
 <nav id="nav"></nav>
 <div id="toast"></div>
